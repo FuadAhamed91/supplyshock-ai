@@ -150,6 +150,22 @@ export function rank(search, objective) {
   return out;
 }
 
+/**
+ * The best plan under each objective, merged when objectives agree (they often
+ * do, since hospital safety outranks everything). In OBJECTIVES order, so the
+ * group holding "balanced" comes first.
+ */
+export function objectivePicks(search) {
+  const groups = [];
+  for (const key of Object.keys(OBJECTIVES)) {
+    const best = rank(search, key)[0];
+    const group = groups.find((g) => g.option.id === best.id);
+    if (group) group.objectives.push(key);
+    else groups.push({ option: best, objectives: [key] });
+  }
+  return groups;
+}
+
 /** Full playback run for a chosen option. */
 export function runPlan(scenario, option, at) {
   const horizon = horizonFor(scenario);

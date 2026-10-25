@@ -9,10 +9,10 @@ A browser app for planners at small distributors to rehearse supply-chain disrup
 
 ## The Core Journey
 1. **Arrive.** A short intro explains the problem ("When one link breaks, who runs out first?") and the three steps. Start or explore.
-2. **Normal week.** The 3D network runs: a ship sails into Bayport Terminal, trucks carry stock to hubs and on to hospitals, crate piles at each hub rise and fall, routes glow blue. Live KPIs and an event feed sit around the map.
+2. **Normal week.** The 3D network runs: a ship sails into Bayport Terminal, trucks carry stock to hubs and on to hospitals, crate piles at each hub rise and fall, routes glow blue. Live KPIs sit in the top bar; the event feed opens from the top bar, so the whole board stays in view.
 3. **Break it.** Choose a disruption card (port congestion, hub shutdown, bridge closure, supplier outage), set how long it lasts, and trigger it — or click a building and use "Simulate a shutdown here".
 4. **See the ripple.** The clock pauses. The camera flies to the disruption, a shockwave spreads, affected routes turn red and affected sites flash. The panel shows the do-nothing outcome: late orders, hospital orders late, time to recover, cost, the chain of consequences with times, and an "orders overdue" chart.
-5. **Recover with AI.** The planner animates while it simulates every combination of recovery levers across 40 possible futures. It recommends a plan with concrete steps, a one-line reason, before → after results with % change, and how often every hospital order stays on time. The user can switch the objective (Balanced, Cheapest, Fastest, Greenest), compare all strategies, or pick another plan.
+5. **Recover with AI.** The planner animates while it simulates every combination of recovery levers across 40 possible futures. It recommends a plan with concrete steps, a one-line reason, before → after results with % change, and how often every hospital order stays on time. Each goal (Balanced, Cheapest, Fastest, Greenest) gets its best plan; goals that agree share one choice, so every choice shown is a different plan. The user can compare all strategies or pick another plan.
 6. **Watch the recovery.** Applying the plan replays the week at 3× from the moment the disruption hits: green trucks and green routes show the plan's moves; the panel tracks live progress against the do-nothing case.
 7. **Report.** Download a printable report (PDF via the browser) or copy a plain-text summary; start a new test.
 
@@ -22,7 +22,8 @@ Success: a first-time viewer understands what went wrong, who it hurt and why th
 One screen. Full-bleed 3D map; floating white cards on top:
 - **Top bar:** brand, status pill, four live KPIs (orders on time, hospital orders late, trucks on the road, stock on hand), help, camera reset, reset.
 - **Left panel:** the guided four-step flow (stepper at the top).
-- **Bottom-right card:** live event feed + legend.
+- **Live events:** a card opened from the top bar (a dot marks new disruption or AI events); the route colour key sits at the right end of the timeline bar.
+- **Map framing:** the camera fits the whole board into the space the cards leave free; phones and portrait tablets use a bottom sheet for the panel.
 - **Bottom bar:** play/pause, speed (1×/3×/8×), clock, scrubbable week timeline with disruption band, ship arrivals, stockouts and plan marker.
 - **Inspector card** (on click): site details and, for the port and hubs, a one-click disruption.
 - **Intro overlay** on load.

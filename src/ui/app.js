@@ -5,7 +5,7 @@ import {
 } from '../data/network.js';
 import { simulate } from '../sim/engine.js';
 import {
-  analyzeImpact, searchPlansAsync, rank, OBJECTIVES, runPlan, extraCost, extraCo2,
+  analyzeImpact, searchPlansAsync, rank, OBJECTIVES, objectivePicks, runPlan, extraCost, extraCo2,
 } from '../sim/planner.js';
 import {
   kpisAt, eventsUntil, fmtTime, overdueSeries, hubState, customerState, portState, backupState,
@@ -140,6 +140,8 @@ export class App {
       b.addEventListener('click', () => this.setSpeed(Number(b.dataset.speed)));
     });
     this.setSpeed(this.speed);
+    $('btn-feed').innerHTML = icon('Activity', 16);
+    $('btn-feed').addEventListener('click', () => this.toggleFeed());
     $('btn-help').innerHTML = icon('Info', 16);
     $('btn-help').addEventListener('click', () => this.showIntro(true));
     $('intro-start').innerHTML = `${icon('Zap', 16)} Start a stress test`;
@@ -217,7 +219,8 @@ export class App {
     }
     if (e.code === 'Escape') {
       if (introOpen) this.showIntro(false);
-      else this.select(null);
+      else if (this.selected) this.select(null);
+      else if (!$('side').hidden) this.toggleFeed(false);
       return;
     }
     if (e.code !== 'Space' || introOpen) return;
@@ -233,6 +236,7 @@ export class App {
   /** ?shot=overview|impact|plan|recovery|report puts the app in a fixed state (README screenshots, sample report). */
   async runShot(kind) {
     this.noWorker = true; // headless capture clocks don't drive Web Workers
+    document.documentElement.classList.add('is-shot'); // ...nor finish CSS transitions
     const wait = (ms) => new Promise((r) => { setTimeout(r, ms); });
     if (kind === 'overview') {
       this.t = 8.2;
@@ -243,15 +247,18 @@ export class App {
     this.t = 6.5;
     this.trigger();
     await wait(4200);
+    this.map.home(0); // headless capture clocks run camera flights slowly
     if (kind === 'impact') return;
     await this.plan();
     // Headless capture clocks run the shockwaves slowly; clear them for a clean still.
     this.map.effects.clearRipples();
+    this.map.home(0);
     if (kind === 'plan') return;
     this.apply();
     this.t = this.scenario.start + 27;
     await wait(1200);
     this.map.effects.clearRipples();
+    this.map.home(0);
     this.setPlaying(false);
     if (kind === 'report') $('report').innerHTML = this.reportHtml();
   }
@@ -381,10 +388,24 @@ export class App {
     $('kpis').innerHTML = tiles.map((x) => `<div class="kpi${x.tone ? ` kpi--${x.tone}` : ''}"><div class="kpi__label">${x.label}</div><div class="kpi__value">${x.value}</div></div>`).join('');
   }
 
+  /** The live events card is opened from the top bar, so it never covers the map uninvited. */
+  toggleFeed(on = $('side').hidden) {
+    $('side').hidden = !on;
+    const btn = $('btn-feed');
+    btn.classList.toggle('is-on', on);
+    btn.setAttribute('aria-expanded', String(on));
+    btn.classList.remove('has-news');
+    this.feedSeenT = this.t;
+  }
+
   renderFeed() {
     const items = eventsUntil(this.run, this.t, 4);
     const key = items.map((e) => `${e.t}${e.text}`).join('|');
     if (key === this.feedKey) return;
+    // A dot on the closed events button when a disruption or AI action just happened.
+    const newest = items[0];
+    if (this.feedKey !== null && newest && $('side').hidden && (newest.tone === 'bad' || newest.tone === 'ai')
+      && newest.t > (this.feedSeenT ?? -Infinity)) $('btn-feed').classList.add('has-news');
     this.feedKey = key;
     $('feed').innerHTML = items.length
       ? items.map((e) => `<li class="feed__item feed__item--${e.tone}"><i></i><div>${e.text}<time>${fmtTime(e.t)}</time></div></li>`).join('')
@@ -579,13 +600,26 @@ export class App {
     const whyNot = isPick && tempting
       ? `<p class="why-not">${icon('Info', 13)}<span>Why not “${planTitle(tempting.actions)}”? Fewer late orders in the expected week (${int(tempting.expected.late)} vs ${int(option.expected.late)}), but a hospital order goes late in ${exposed} of ${this.search.runs} futures.</span></p>`
       : '';
+    // One choice per distinct plan: objectives that agree share a button, and
+    // when all four agree there is nothing to switch between.
+    const picks = objectivePicks(this.search);
+    const group = picks.find((g) => g.objectives.includes(this.objective)) || picks[0];
+    const names = (keys) => keys.map((k, i) => (i ? OBJECTIVES[k].label.toLowerCase() : OBJECTIVES[k].label));
+    const joined = (keys) => { const n = names(keys); return n.length > 1 ? `${n.slice(0, -1).join(', ')} & ${n[n.length - 1]}` : n[0]; };
+    const choices = picks.length > 1
+      ? `<div class="seg seg--picks" role="group" aria-label="Best plan for">${picks.map((g) => `<button data-act="objective" data-obj="${g.objectives[0]}" class="${g === group ? 'is-on' : ''}" aria-pressed="${g === group}" title="${g.objectives.map((k) => OBJECTIVES[k].hint).join(' · ')}">${joined(g.objectives)}</button>`).join('')}</div>`
+      : '';
+    const wins = isPick
+      ? `<div class="plan__wins"><span class="plan__wins-label">Best for</span>${group.objectives.map((k) => `<span class="win" title="${OBJECTIVES[k].hint}">${icon('Check', 11, 2.6)}${OBJECTIVES[k].label}</span>`).join('')}</div>`
+      : '';
     return `${this.stepsHtml(2)}
       <h2>${noAction ? 'No action needed' : 'Your recovery plan'}</h2>
-      <p class="lead">Picked from ${this.search.strategies} strategies, each played out across ${this.search.runs} possible futures from the moment the disruption hits.</p>
-      <div class="seg" role="group" aria-label="Optimize for">${Object.entries(OBJECTIVES).map(([k, o]) => `<button data-act="objective" data-obj="${k}" class="${k === this.objective ? 'is-on' : ''}" aria-pressed="${k === this.objective}" title="${o.hint}">${o.label}</button>`).join('')}</div>
+      <p class="lead">Picked from ${this.search.strategies} strategies, each played out across ${this.search.runs} possible futures from the moment the disruption hits.${picks.length > 1 ? ' Different goals favour different plans:' : ''}</p>
+      ${choices}
       <div class="plan" style="margin-top:12px">
         <span class="plan__badge">${icon(isPick ? 'Sparkles' : 'Check', 13)} ${isPick ? 'AI recommended' : 'Your pick'}</span>
         <div class="plan__title">${planTitle(option.actions)}</div>
+        ${wins}
         <p class="reason">${planReason(option, this.scenario)}</p>
         <div class="plan__actions">${steps.map((a) => `<div class="action"><span class="action__icon">${icon(a.icon, 15)}</span><div><b>${a.title}</b>${a.text}</div></div>`).join('')}</div>
         ${this.resultsHtml(baseline.expected, option.expected, H)}
@@ -860,6 +894,8 @@ export class App {
 
   reset() {
     this.cancelPending();
+    $('btn-feed').classList.remove('has-news');
+    this.feedSeenT = -Infinity;
     this.mode = 'normal';
     this.scenario = null;
     this.impact = null;

@@ -112,7 +112,7 @@ export class MapView {
     this.world.flyTo(new THREE.Vector3(b.x, 0, b.z), b.focus || 80);
   }
 
-  home() { this.world.home(); }
+  home(duration) { this.world.home(duration); }
 
   /** Shockwave from `origin` ({x, z}), then each affected site lights up in turn. */
   ripple(origin, affected, color = '#E5484D') {

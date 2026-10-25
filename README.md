@@ -25,7 +25,7 @@ A ship stuck outside a port on Monday can leave a hospital without insulin by We
    - reroute around the disruption;
    - serve hospitals first.
 
-   Each combination is simulated in an expected week plus 40 randomized futures, shown live as a grid: one row per strategy, one square per future, green when every hospital order arrived on time. The planner recommends a plan with concrete steps, before → after results and a confidence figure ("every hospital order on time in 40 of 40 futures"). It prefers robust plans and says why: *"Why not Backup supplier + Rebalance stock? Fewer late orders in the expected week (0 vs 3), but a hospital order goes late in 19 of 40 futures."* You can switch the objective (Balanced, Cheapest, Fastest, Greenest) and compare all strategies.
+   Each combination is simulated in an expected week plus 40 randomized futures, shown live as a grid: one row per strategy, one square per future, green when every hospital order arrived on time. The planner recommends a plan with concrete steps, before → after results and a confidence figure ("every hospital order on time in 40 of 40 futures"). It prefers robust plans and says why: *"Why not Backup supplier + Rebalance stock? Fewer late orders in the expected week (0 vs 3), but a hospital order goes late in 19 of 40 futures."* Each goal (balanced, cheapest, fastest, greenest) gets its best plan; goals that agree share one choice, so every option on screen is a different plan (*"Balanced & fastest"* vs *"Cheapest & greenest"*), and when all four agree the plan is simply marked best for all of them. You can also compare all strategies.
 4. **Watch it recover and share it.** Apply the plan: the week replays from the moment the disruption hits, with green trucks and routes carrying the AI's moves while live progress tracks against "do nothing". Download a printable report ([sample PDF](docs/sample-report.pdf)) or copy a summary.
 
 | 1 · See the ripple | 2 · AI recovery plan | 3 · Watch it recover |
@@ -73,12 +73,14 @@ Requires Node 20.19+ (or 22.12+) and a browser with WebGL.
 ```bash
 npm install
 npm run dev        # open http://localhost:5173
-npm test           # 13 simulator + planner tests
+npm test           # 14 simulator + planner tests
 npm run build      # static site in dist/
 npm run assets     # rebuild the 3D models (needs Blender on your PATH)
 ```
 
 Deployed on Vercel as a static Vite site (`vercel.json`). The Vercel project is linked to this repository, so every push to `main` redeploys the live demo.
+
+The camera frames the whole board in the space the panels leave free, on any screen size; the live event feed opens from the top bar and the route colours sit in the timeline, so nothing covers the map.
 
 Controls: drag to orbit, scroll to zoom, click a building for details. <kbd>Space</kbd> plays or pauses, the arrow keys move along the focused timeline, <kbd>Esc</kbd> closes a card.
 

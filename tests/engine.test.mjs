@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { simulate, total } from '../src/sim/engine.js';
 import {
-  searchPlans, rank, runPlan, horizonFor, OBJECTIVES,
+  searchPlans, rank, runPlan, horizonFor, OBJECTIVES, objectivePicks,
 } from '../src/sim/planner.js';
 import { route } from '../src/sim/graph.js';
 import { hubState, fmtTime } from '../src/sim/query.js';
@@ -147,6 +147,17 @@ test('no objective trades hospital safety for cost, speed or CO2', () => {
       const pick = rank(search, objective)[0];
       assert.ok(pick.stats.success >= safest - 1e-9, `${sc.type} / ${objective}: ${pick.id} is less safe than the best plan`);
     }
+  }
+});
+
+test('every goal choice shown is a different plan', () => {
+  for (const sc of scenarios) {
+    const search = searchPlans(sc, sc.start, { runs: 12 });
+    const picks = objectivePicks(search);
+    const ids = picks.map((g) => g.option.id);
+    assert.equal(new Set(ids).size, ids.length, `${sc.type}: duplicate plans`);
+    assert.deepEqual(picks.flatMap((g) => g.objectives).sort(), Object.keys(OBJECTIVES).sort(), `${sc.type}: every goal appears once`);
+    for (const g of picks) for (const k of g.objectives) assert.equal(rank(search, k)[0].id, g.option.id);
   }
 });
 

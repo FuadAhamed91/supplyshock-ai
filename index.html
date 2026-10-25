@@ -33,6 +33,7 @@
       <div id="status" class="status" role="status"></div>
       <div id="kpis" class="kpis" aria-label="Network right now"></div>
       <div class="topbar__right">
+        <button id="btn-feed" class="icon-btn" title="Live events" aria-label="Live events" aria-expanded="false" aria-controls="side"></button>
         <button id="btn-help" class="icon-btn" title="How it works" aria-label="How it works"></button>
         <button id="btn-home" class="icon-btn" title="Reset camera" aria-label="Reset camera"></button>
         <button id="btn-reset" class="btn btn--ghost btn--sm" title="Start over" aria-label="Reset the simulation"></button>
@@ -41,15 +42,10 @@
 
     <aside id="panel" class="panel card" aria-label="Stress test" tabindex="-1"></aside>
 
-    <aside id="side" class="side card">
+    <!-- Opened from the top bar, so nothing covers the map by default -->
+    <aside id="side" class="side card" aria-label="Live events" hidden>
       <h3 class="eyebrow">Live events</h3>
       <ol id="feed" class="feed__list"></ol>
-      <div class="legend">
-        <div class="legend__row"><i class="swatch swatch--normal"></i>Shipment</div>
-        <div class="legend__row"><i class="swatch swatch--ai"></i>AI recovery</div>
-        <div class="legend__row"><i class="swatch swatch--warn"></i>At risk</div>
-        <div class="legend__row"><i class="swatch swatch--bad"></i>Disrupted</div>
-      </div>
     </aside>
 
     <div id="inspector" class="inspector card" hidden></div>
@@ -65,6 +61,12 @@
         <div id="track-marks" class="track__marks"></div>
         <div id="track-fill" class="track__fill"></div>
         <div id="track-thumb" class="track__thumb"></div>
+      </div>
+      <div class="legend" aria-label="Route colours">
+        <span class="legend__row"><i class="swatch swatch--normal"></i>Shipment</span>
+        <span class="legend__row"><i class="swatch swatch--ai"></i>AI recovery</span>
+        <span class="legend__row"><i class="swatch swatch--warn"></i>At risk</span>
+        <span class="legend__row"><i class="swatch swatch--bad"></i>Disrupted</span>
       </div>
     </footer>
 

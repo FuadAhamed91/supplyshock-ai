@@ -17,7 +17,7 @@ Why this shape: one deterministic simulator powers both the animation and the AI
 ## The Core Journey Through the System
 1. Load → `MapView.init` loads `public/models/supplyshock.glb`, builds the board → `simulate()` runs a normal week → the clock plays it.
 2. Trigger → `analyzeImpact(scenario)` runs the do-nothing week + 40 futures → the map switches to that run, `ripple()` animates, the panel shows metrics and `rippleChain()`.
-3. Find plans → `searchPlansAsync()` evaluates every lever combination → `rank()` orders them for the chosen objective → panel shows `actionDetails()`, `planReason()` and before/after.
+3. Find plans → `searchPlansAsync()` evaluates every lever combination → `objectivePicks()` takes each objective's best plan and merges objectives that agree → panel shows one choice per distinct plan with `actionDetails()`, `planReason()` and before/after.
 4. Apply → `runPlan()` replays the week with the plan from the disruption's start → green trips/routes appear → live progress compares against the do-nothing run.
 5. Report → `buildReport()` fills a print-only article → browser print/save as PDF.
 PRD ref: `prd.md > The Core Journey`.
