@@ -152,6 +152,7 @@ export class App {
 
   /** ?shot=overview|impact|plan|recovery puts the app in a fixed state (used for README screenshots). */
   async runShot(kind) {
+    this.noWorker = true; // headless capture clocks don't drive Web Workers
     const wait = (ms) => new Promise((r) => { setTimeout(r, ms); });
     if (kind === 'overview') {
       this.t = 8.2;
@@ -615,7 +616,7 @@ export class App {
 
   /** Planner in a Web Worker (falls back to the main thread if workers are unavailable). */
   searchInWorker(scenario, at, { runs, onProgress }) {
-    if (typeof Worker === 'undefined') return searchPlansAsync(scenario, at, { runs, onProgress });
+    if (this.noWorker || typeof Worker === 'undefined') return searchPlansAsync(scenario, at, { runs, onProgress });
     return new Promise((resolve) => {
       let worker;
       try {
