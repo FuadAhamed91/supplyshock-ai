@@ -140,6 +140,8 @@ export class App {
       b.addEventListener('click', () => this.setSpeed(Number(b.dataset.speed)));
     });
     this.setSpeed(this.speed);
+    $('btn-panel').innerHTML = icon('PanelLeft', 17);
+    $('btn-panel').addEventListener('click', () => this.togglePanel());
     $('btn-feed').innerHTML = icon('Activity', 16);
     $('btn-feed').addEventListener('click', () => this.toggleFeed());
     $('btn-help').innerHTML = icon('Info', 16);
@@ -388,7 +390,18 @@ export class App {
     $('kpis').innerHTML = tiles.map((x) => `<div class="kpi${x.tone ? ` kpi--${x.tone}` : ''}"><div class="kpi__label">${x.label}</div><div class="kpi__value">${x.value}</div></div>`).join('');
   }
 
-  /** The live events card is opened from the top bar, so it never covers the map uninvited. */
+  /** Fold the panel away for an unobstructed look at the board. The camera
+   *  refits to whatever space the chrome now leaves free. */
+  togglePanel(on = $('panel').hidden) {
+    $('panel').hidden = !on;
+    const btn = $('btn-panel');
+    btn.classList.toggle('is-on', on);
+    btn.setAttribute('aria-expanded', String(on));
+    btn.setAttribute('aria-label', on ? 'Hide the stress-test panel' : 'Show the stress-test panel');
+    this.map.world.resize(); // refits the home view, and recentres it if untouched
+  }
+
+  /** The live events card is opened from the rail, so it never covers the map uninvited. */
   toggleFeed(on = $('side').hidden) {
     $('side').hidden = !on;
     const btn = $('btn-feed');

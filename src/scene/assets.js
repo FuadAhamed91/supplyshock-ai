@@ -1,18 +1,59 @@
 // Loads the Blender-built asset pack (public/models/supplyshock.glb) and hands
 // out clones. Run `npm run assets` to rebuild the GLB from blender/build_assets.py.
 //
-// For speed, every asset is "baked" once at load: all of its materials collapse
-// into one vertex-coloured mesh (one draw call), except materials the app
-// recolours at runtime (KEEP), which stay as their own small meshes.
+// Baking: a prop can arrive with 20 materials, which would be 20 draw calls per
+// copy. We merge its meshes into one vertex-coloured mesh *per surface finish* —
+// matte render, glossy paint, metal, glass, emissive — so a prop costs a handful
+// of draw calls while plaster still reads as plaster and glass as glass. Flatten
+// them all into a single material instead and the whole board turns to clay.
+// Materials the app recolours at runtime (KEEP) stay as their own small meshes.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const url = `${import.meta.env.BASE_URL}models/supplyshock.glb`;
-const KEEP = new Set(['TintTruck', 'Brand', 'TintRoof', 'HullTop']);
+// Foliage is kept separate too, so each instanced tree can be given its own green.
+const KEEP = new Set(['TintTruck', 'Brand', 'TintRoof', 'HullTop', 'Leaf', 'LeafDark']);
 let library = null;
 const bakedCache = new Map();
-const bakedMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0.05, envMapIntensity: 0.6 });
+const finishCache = new Map();
+
+/** Vehicle paint and signage get a clearcoat, so they read as sprayed, not moulded. */
+const CLEARCOAT = new Set(['TintTruck', 'Brand']);
+
+/**
+ * One material per surface finish. Roughness and metalness are quantised so
+ * near-identical finishes share a bucket (and a draw call); emissive surfaces
+ * keep their own, since their glow colour can't ride on vertex colours.
+ */
+function finishKey(m) {
+  const lit = m.emissive && m.emissive.getHex() !== 0 && (m.emissiveIntensity ?? 1) > 0;
+  if (lit) return `e:${m.name}`;
+  const r = Math.round(THREE.MathUtils.clamp(m.roughness ?? 0.75, 0, 1) * 10) / 10;
+  const t = Math.round(THREE.MathUtils.clamp(m.metalness ?? 0, 0, 1) * 10) / 10;
+  return `s:${r}:${t}`;
+}
+
+function finishMaterial(key, src) {
+  if (finishCache.has(key)) return finishCache.get(key);
+  let m;
+  if (key.startsWith('e:')) {
+    m = src.clone();
+    m.vertexColors = false;
+  } else {
+    const [, r, t] = key.split(':').map(Number);
+    m = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: r,
+      metalness: t,
+      // Smooth surfaces should mirror more of the sky than plaster does.
+      envMapIntensity: 0.6 + (1 - r) * 1.5,
+    });
+  }
+  m.name = `finish${key}`;
+  finishCache.set(key, m);
+  return m;
+}
 
 export async function loadAssets(onProgress) {
   const gltf = await new GLTFLoader().loadAsync(url, (e) => {
@@ -24,10 +65,10 @@ export async function loadAssets(onProgress) {
   return library;
 }
 
-/** Collapse every mesh under `root` into one vertex-coloured geometry (+ kept materials). */
+/** Collapse every mesh under `root` into one vertex-coloured geometry per finish (+ kept materials). */
 function bakeNode(root, name) {
   const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
-  const parts = [];
+  const buckets = new Map(); // finish key -> { material, geos }
   const kept = new Map();
   root.traverse((o) => {
     if (!o.isMesh) return;
@@ -41,31 +82,49 @@ function bakeNode(root, name) {
       kept.get(m.name).geos.push(g);
       return;
     }
-    const c = m.color;
-    const n = g.attributes.position.count;
-    const pos = g.attributes.position;
-    const col = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) {
-      // cheap baked occlusion: surfaces close to the ground are a little darker
-      const y = pos.getY(i);
-      const t = Math.min(1, Math.max(0, y / 1.6));
-      const ao = 0.74 + 0.26 * t * t * (3 - 2 * t);
-      col[i * 3] = c.r * ao;
-      col[i * 3 + 1] = c.g * ao;
-      col[i * 3 + 2] = c.b * ao;
+    const key = finishKey(m);
+    if (!buckets.has(key)) buckets.set(key, { material: finishMaterial(key, m), geos: [], lit: key.startsWith('e:') });
+    const bucket = buckets.get(key);
+    if (!bucket.lit) {
+      // Base colour rides on the vertices, plus a hint of contact shading near
+      // the ground; screen-space occlusion in world.js does the rest.
+      const c = m.color;
+      const n = g.attributes.position.count;
+      const pos = g.attributes.position;
+      const col = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        const y = pos.getY(i);
+        const t = Math.min(1, Math.max(0, y / 1.6));
+        const ao = 0.84 + 0.16 * t * t * (3 - 2 * t);
+        col[i * 3] = c.r * ao;
+        col[i * 3 + 1] = c.g * ao;
+        col[i * 3 + 2] = c.b * ao;
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     }
-    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    parts.push(g);
+    bucket.geos.push(g);
   });
   const group = new THREE.Group();
   group.name = name;
-  if (parts.length) {
-    const mesh = new THREE.Mesh(mergeGeometries(parts), bakedMaterial);
-    mesh.name = `${name}__baked`;
+  for (const [key, { material, geos }] of buckets) {
+    const mesh = new THREE.Mesh(mergeGeometries(geos), material);
+    mesh.name = `${name}__${key}`;
     group.add(mesh);
   }
   for (const [mname, { material, geos }] of kept) {
-    const mesh = new THREE.Mesh(mergeGeometries(geos), material);
+    let mat = material;
+    if (CLEARCOAT.has(mname) && !material.isMeshPhysicalMaterial) {
+      mat = new THREE.MeshPhysicalMaterial({
+        name: mname,
+        color: material.color,
+        roughness: material.roughness,
+        metalness: material.metalness,
+        clearcoat: 0.7,
+        clearcoatRoughness: 0.22,
+        envMapIntensity: 1.2,
+      });
+    }
+    const mesh = new THREE.Mesh(mergeGeometries(geos), mat);
     mesh.name = `${name}__${mname}`;
     group.add(mesh);
   }

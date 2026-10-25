@@ -13,7 +13,7 @@ import { createWater } from './water.js';
 export const BOARD = { x0: -80, x1: 80, z0: -56, z1: 56, r: 9 };
 export const ROAD_W = 3.2;
 export const COLORS = {
-  land: '#F3F5F8',
+  land: '#EDF1EA',
   landSide: '#E3E0D7',
   base: '#DCE3EC',
   water: '#BCDCF1',
@@ -22,6 +22,48 @@ export const COLORS = {
   roadLine: '#FFFFFF',
   quay: '#D8DEE6',
 };
+
+/**
+ * Soft mottling for the land: without it the board reads as blank paper under
+ * this much ambient light. Blobs are drawn nine times, wrapped, so the texture
+ * tiles without a visible seam.
+ */
+function groundTexture() {
+  const S = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, S, S);
+  const rng = mulberry32(23);
+  for (let i = 0; i < 190; i++) {
+    const x = rng() * S;
+    const y = rng() * S;
+    const r = 12 + rng() * 44;
+    const shade = rng();
+    const tint = shade < 0.45 ? '198, 208, 193' : shade < 0.8 ? '214, 211, 198' : '255, 255, 255';
+    const alpha = 0.1 + rng() * 0.22;
+    for (const dx of [-S, 0, S]) {
+      for (const dy of [-S, 0, S]) {
+        const g = ctx.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
+        g.addColorStop(0, `rgba(${tint}, ${alpha})`);
+        g.addColorStop(1, `rgba(${tint}, 0)`);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(x + dx, y + dy, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.repeat.set(1 / 54, 1 / 54); // extrude UVs are in world units
+  tex.anisotropy = 4;
+  return tex;
+}
 
 export const coastX = (z) => -47 + 2.4 * Math.sin(z * 0.09) + 1.4 * Math.sin(z * 0.21 + 1.3);
 
@@ -154,7 +196,7 @@ export function buildTerrain(scene) {
       depth: 0.6, bevelEnabled: true, bevelThickness: 0.25, bevelSize: 0.5, bevelSegments: 2, curveSegments: 6,
     })),
     [
-      new THREE.MeshStandardMaterial({ color: COLORS.land, roughness: 0.95 }),
+      new THREE.MeshStandardMaterial({ color: COLORS.land, roughness: 0.95, map: groundTexture() }),
       new THREE.MeshStandardMaterial({ color: COLORS.landSide, roughness: 0.95 }),
     ],
   );
@@ -274,18 +316,29 @@ function scatterScenery(group, roadPaths, river) {
   // Trees: clustered with a low-frequency noise field
   const trees = [];
   const field = (x, z) => Math.sin(x * 0.08) * Math.cos(z * 0.09) + Math.sin((x + z) * 0.05);
-  for (let i = 0; i < 2600 && trees.length < 260; i++) {
+  for (let i = 0; i < 5200 && trees.length < 430; i++) {
     const x = BOARD.x0 + rng() * (BOARD.x1 - BOARD.x0);
     const z = BOARD.z0 + rng() * (BOARD.z1 - BOARD.z0);
     if (field(x, z) < 0.15 && rng() > 0.12) continue;
     if (blocked(x, z, 3.6)) continue;
     if (homes.some((h) => Math.hypot(h[0] - x, h[1] - z) < 3.4)) continue;
-    if (trees.some((t) => Math.hypot(t.x - x, t.z - z) < 2.3)) continue;
-    trees.push({ x, z, ry: rng() * Math.PI * 2, s: 0.75 + rng() * 0.55, kind: rng() < 0.6 ? 'tree_round' : 'tree_cone' });
+    if (trees.some((t) => Math.hypot(t.x - x, t.z - z) < 1.95)) continue;
+    trees.push({
+      x, z, ry: rng() * Math.PI * 2, s: 0.7 + rng() * 0.75,
+      kind: rng() < 0.6 ? 'tree_round' : 'tree_cone',
+      color: LEAF_COLORS[Math.floor(rng() * LEAF_COLORS.length)],
+    });
   }
-  addInstanced(group, 'tree_round', trees.filter((t) => t.kind === 'tree_round'));
-  addInstanced(group, 'tree_cone', trees.filter((t) => t.kind === 'tree_cone'));
+  // Woodland reads as woodland only when no two neighbours share a green.
+  const round = trees.filter((t) => t.kind === 'tree_round');
+  const cone = trees.filter((t) => t.kind === 'tree_cone');
+  const isLeaf = (m) => m.name === 'Leaf' || m.name === 'LeafDark';
+  addInstanced(group, 'tree_round', round, isLeaf, (i) => round[i].color);
+  addInstanced(group, 'tree_cone', cone, isLeaf, (i) => cone[i].color);
 }
+
+const LEAF_COLORS = ['#9CCB90', '#8CC088', '#AFD9A0', '#7FB487', '#BCE0AB', '#93C9A2', '#A8D293']
+  .map((c) => new THREE.Color(c));
 
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();

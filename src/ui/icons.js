@@ -3,14 +3,14 @@ import {
   Ship, Warehouse, Factory, Hospital, Stethoscope, Pill, House, PlugZap, Construction, Zap,
   Sparkles, Play, Pause, RotateCcw, Download, Copy, Check, Clock, Leaf, DollarSign, Route,
   Boxes, HeartPulse, TriangleAlert, CircleCheck, X, ArrowRight, ShieldCheck, Gauge, Truck,
-  Activity, Printer, MousePointerClick, Info, Anchor, LocateFixed, ChevronDown, Timer, Package,
+  Activity, Printer, MousePointerClick, Info, Anchor, LocateFixed, ChevronDown, Timer, Package, PanelLeft,
 } from 'lucide';
 
 const ICONS = {
   Ship, Warehouse, Factory, Hospital, Stethoscope, Pill, House, PlugZap, Construction, Zap,
   Sparkles, Play, Pause, RotateCcw, Download, Copy, Check, Clock, Leaf, DollarSign, Route,
   Boxes, HeartPulse, TriangleAlert, CircleCheck, X, ArrowRight, ShieldCheck, Gauge, Truck,
-  Activity, Printer, MousePointerClick, Info, Anchor, LocateFixed, ChevronDown, Timer, Package,
+  Activity, Printer, MousePointerClick, Info, Anchor, LocateFixed, ChevronDown, Timer, Package, PanelLeft,
 };
 
 const esc = (v) => String(v).replace(/"/g, '&quot;');

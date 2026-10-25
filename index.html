@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SupplyShock AI — disruption simulator for distributors</title>
     <meta name="description" content="Break one link of a supply chain on a live 3D map, watch the shock ripple out to hospitals, and let an AI planner rehearse every recovery option." />
-    <meta name="theme-color" content="#EEF2F7" />
+    <meta name="theme-color" content="#E8EEF6" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="SupplyShock AI — when one link breaks, who runs out first?" />
     <meta property="og:description" content="Break one link of a supply chain on a live 3D map, watch the shock ripple out to hospitals, and let an AI planner rehearse every recovery option." />
@@ -22,27 +22,33 @@
   <body>
     <div id="map" class="map"></div>
 
-    <header class="topbar card">
-      <div class="brand">
+    <!-- The app's spine: everything that is always available lives here, so the
+         map keeps the rest of the screen. -->
+    <nav class="rail" data-chrome="rail" aria-label="SupplyShock AI">
+      <div class="rail__brand" title="SupplyShock AI">
         <span class="brand__mark" aria-hidden="true"></span>
-        <div>
-          <div class="brand__name">SupplyShock <span>AI</span></div>
-          <div class="brand__tag">Disruption simulator for distributors</div>
-        </div>
       </div>
-      <div id="status" class="status" role="status"></div>
-      <div id="kpis" class="kpis" aria-label="Network right now"></div>
-      <div class="topbar__right">
-        <button id="btn-feed" class="icon-btn" title="Live events" aria-label="Live events" aria-expanded="false" aria-controls="side"></button>
-        <button id="btn-help" class="icon-btn" title="How it works" aria-label="How it works"></button>
-        <button id="btn-home" class="icon-btn" title="Reset camera" aria-label="Reset camera"></button>
-        <button id="btn-reset" class="btn btn--ghost btn--sm" title="Start over" aria-label="Reset the simulation"></button>
+      <div class="rail__group">
+        <button id="btn-panel" class="rail__btn is-on" data-tip="Stress test" aria-label="Hide the stress-test panel" aria-expanded="true" aria-controls="panel"></button>
+        <button id="btn-feed" class="rail__btn" data-tip="Live events" aria-label="Live events" aria-expanded="false" aria-controls="side"></button>
+        <button id="btn-help" class="rail__btn" data-tip="How it works" aria-label="How it works"></button>
       </div>
-    </header>
+      <div class="rail__spacer"></div>
+      <div class="rail__group">
+        <button id="btn-home" class="rail__btn" data-tip="Reset camera" aria-label="Reset camera"></button>
+        <button id="btn-reset" class="rail__btn rail__btn--warn" data-tip="Start over" aria-label="Reset the simulation"></button>
+      </div>
+    </nav>
 
     <aside id="panel" class="panel card" aria-label="Stress test" tabindex="-1"></aside>
 
-    <!-- Opened from the top bar, so nothing covers the map by default -->
+    <!-- Status and the four live numbers, kept to one thin strip. -->
+    <header class="hud card" data-chrome="top">
+      <div id="status" class="status" role="status"></div>
+      <div id="kpis" class="kpis" aria-label="Network right now"></div>
+    </header>
+
+    <!-- Opened from the rail, so nothing covers the map by default -->
     <aside id="side" class="side card" aria-label="Live events" hidden>
       <h3 class="eyebrow">Live events</h3>
       <ol id="feed" class="feed__list"></ol>
@@ -50,7 +56,7 @@
 
     <div id="inspector" class="inspector card" hidden></div>
 
-    <footer class="timeline card">
+    <footer class="scrub card" data-chrome="bottom">
       <button id="btn-play" class="play" title="Play / pause (space)"></button>
       <div class="speed" role="group" aria-label="Playback speed">
         <button data-speed="1">1×</button><button data-speed="3">3×</button><button data-speed="8">8×</button>
@@ -62,12 +68,17 @@
         <div id="track-fill" class="track__fill"></div>
         <div id="track-thumb" class="track__thumb"></div>
       </div>
-      <div class="legend" aria-label="Route colours">
-        <span class="legend__row"><i class="swatch swatch--normal"></i>Shipment</span>
-        <span class="legend__row"><i class="swatch swatch--ai"></i>AI recovery</span>
-        <span class="legend__row"><i class="swatch swatch--warn"></i>At risk</span>
-        <span class="legend__row"><i class="swatch swatch--bad"></i>Disrupted</span>
-      </div>
+      <!-- The colour key is one click away instead of always on screen. -->
+      <details class="key">
+        <summary title="Route colour key" aria-label="Route colour key"></summary>
+        <div class="key__pop">
+          <div class="eyebrow">Route colours</div>
+          <span class="legend__row"><i class="swatch swatch--normal"></i>Shipment</span>
+          <span class="legend__row"><i class="swatch swatch--ai"></i>AI recovery</span>
+          <span class="legend__row"><i class="swatch swatch--warn"></i>At risk</span>
+          <span class="legend__row"><i class="swatch swatch--bad"></i>Disrupted</span>
+        </div>
+      </details>
     </footer>
 
     <div id="toast" class="toast" role="status" hidden></div>

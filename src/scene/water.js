@@ -103,7 +103,10 @@ const NORMAL = /* glsl */`
 `;
 
 function waterMaterial(kind, shared, { shallow, deep, ripple }) {
-  const mat = new THREE.MeshStandardMaterial({ roughness: 0.3, metalness: 0 });
+  // Low roughness plus a strong sky reflection is what makes the sea read as
+  // water rather than painted plaster: the sun lands as a tight glint, which
+  // the bloom pass in world.js lets bleed into a sparkle.
+  const mat = new THREE.MeshStandardMaterial({ roughness: 0.12, metalness: 0.02, envMapIntensity: 1.7 });
   const uniforms = {
     ...shared,
     uShallow: { value: new THREE.Color(shallow) },
@@ -118,7 +121,7 @@ function waterMaterial(kind, shared, { shallow, deep, ripple }) {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n#define WATER_${kind.toUpperCase()}\n#define WATER_RIPPLE ${ripple.toFixed(2)}\n${PARS}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${COLOR}`)
-      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.85, wFoam);')
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.9, wFoam);')
       .replace('#include <normal_fragment_maps>', NORMAL);
   };
   mat.customProgramCacheKey = () => `water-${kind}`;
@@ -128,8 +131,8 @@ function waterMaterial(kind, shared, { shallow, deep, ripple }) {
 export function createWater() {
   const shared = { uTime: { value: 0 }, uRipple: { value: rippleTexture() } };
   return {
-    sea: waterMaterial('sea', shared, { shallow: '#CBEDEC', deep: '#8FC0E4', ripple: 0.18 }),
-    river: waterMaterial('river', shared, { shallow: '#D3EEEC', deep: '#9DCBEA', ripple: 0.16 }),
+    sea: waterMaterial('sea', shared, { shallow: '#B6E6E8', deep: '#5E9FD8', ripple: 0.3 }),
+    river: waterMaterial('river', shared, { shallow: '#C4E9E8', deep: '#79B4E2', ripple: 0.26 }),
     update(time) { shared.uTime.value = time; },
   };
 }

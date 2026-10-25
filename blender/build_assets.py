@@ -95,6 +95,21 @@ WHITE = lambda: mat("White", "#FFFFFF", 0.6)
 # gets a single mesh (one draw call per material).
 # --------------------------------------------------------------------------- #
 
+# Every hard edge gets a small chamfer. At model scale it is invisible as a
+# shape, but it catches the key light as a bright line and the sky as a soft
+# one, which is most of what separates a rendered model from flat-shaded boxes.
+AUTO_BEVEL = 0.022
+
+
+def _auto(bevel, *dims):
+    """Chamfer width for a shape with these dimensions (None = the default)."""
+    if bevel is None:
+        bevel = AUTO_BEVEL
+    if bevel <= 0:
+        return 0.0
+    return max(0.0, min(bevel, *(abs(d) / 6.0 for d in dims if d)))
+
+
 class Builder:
     def __init__(self, name):
         self.name = name
@@ -120,16 +135,16 @@ class Builder:
         bpy.data.meshes.remove(me)
 
     # Axis-aligned box from bounds.
-    def box(self, m, x0, x1, y0, y1, z0, z1, bevel=0.0, segments=1):
+    def box(self, m, x0, x1, y0, y1, z0, z1, bevel=None, segments=1):
         tmp = bmesh.new()
         sx, sy, sz = x1 - x0, y1 - y0, z1 - z0
         mtx = Matrix.Translation(((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2)) @ \
             Matrix.Diagonal((sx, sy, sz, 1.0))
         bmesh.ops.create_cube(tmp, size=1.0, matrix=mtx)
-        self._merge(tmp, m, min(bevel, sx / 2.2, sy / 2.2, sz / 2.2) if bevel else 0.0, segments)
+        self._merge(tmp, m, _auto(bevel, sx, sy, sz), segments)
 
     # Square-section beam between two points.
-    def beam(self, m, p0, p1, w=0.3, h=None):
+    def beam(self, m, p0, p1, w=0.3, h=None, bevel=None):
         h = h or w
         p0, p1 = Vector(p0), Vector(p1)
         d = p1 - p0
@@ -138,9 +153,9 @@ class Builder:
         mtx = Matrix.Translation((p0 + p1) / 2) @ rot @ Matrix.Diagonal((length, w, h, 1.0))
         tmp = bmesh.new()
         bmesh.ops.create_cube(tmp, size=1.0, matrix=mtx)
-        self._merge(tmp, m)
+        self._merge(tmp, m, _auto(bevel, length, w, h))
 
-    def cylinder(self, m, cx, cy, z0, z1, r, r_top=None, seg=16, axis="Z", bevel=0.0):
+    def cylinder(self, m, cx, cy, z0, z1, r, r_top=None, seg=24, axis="Z", bevel=None):
         r_top = r if r_top is None else r_top
         depth = z1 - z0
         tmp = bmesh.new()
@@ -152,16 +167,16 @@ class Builder:
             mtx = Matrix.Translation(((z0 + z1) / 2, cx, cy)) @ Matrix.Rotation(math.pi / 2, 4, "Y")
         bmesh.ops.create_cone(tmp, cap_ends=True, cap_tris=False, segments=seg,
                               radius1=r, radius2=r_top, depth=depth, matrix=mtx)
-        self._merge(tmp, m, bevel)
+        self._merge(tmp, m, _auto(bevel, depth, r * 2, (r_top or r) * 2))
 
-    def sphere(self, m, cx, cy, cz, r, sub=1, squash=1.0):
+    def sphere(self, m, cx, cy, cz, r, sub=2, squash=1.0):
         tmp = bmesh.new()
         mtx = Matrix.Translation((cx, cy, cz)) @ Matrix.Diagonal((1.0, 1.0, squash, 1.0))
         bmesh.ops.create_icosphere(tmp, subdivisions=sub, radius=r, matrix=mtx)
         self._merge(tmp, m)
 
     # Triangular prism along X (gable roofs). Eaves at +/-half_w, ridge height h.
-    def gable(self, m, x0, x1, half_w, z0, h, yc=0.0):
+    def gable(self, m, x0, x1, half_w, z0, h, yc=0.0, bevel=None):
         tmp = bmesh.new()
         prof = [(yc - half_w, z0), (yc + half_w, z0), (yc, z0 + h)]
         a = [tmp.verts.new((x0, y, z)) for y, z in prof]
@@ -172,7 +187,7 @@ class Builder:
             j = (i + 1) % 3
             tmp.faces.new((a[i], a[j], b[j], b[i]))
         bmesh.ops.recalc_face_normals(tmp, faces=tmp.faces)
-        self._merge(tmp, m)
+        self._merge(tmp, m, _auto(bevel, x1 - x0, half_w * 2, h))
 
     # Extrude a closed XY polygon between two heights, optionally tapering:
     # bottom outline and top outline must have the same vertex count.

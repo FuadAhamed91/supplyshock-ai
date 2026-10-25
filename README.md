@@ -54,17 +54,28 @@ network data ──► discrete-event simulator ──► 3D map + panels (what 
   - About 330–650 simulations run in under a second, right in the browser. No server and no API keys.
 - **3D map** (`src/scene/`) uses Three.js:
   - a diorama board with coast, river and bridges;
-  - instanced trees and homes;
+  - a physical sky baked into an environment map, so paint, metal and glass each
+    catch the light differently, plus ground-truth ambient occlusion (GTAO) and a
+    touch of bloom for sun glints on the water (`src/scene/world.js`);
+  - instanced trees and homes, each tree given its own green;
   - animated status-coloured route lines (indigo normal, green AI recovery, amber at risk, red disrupted);
   - stock piles that rise and fall;
   - ships that berth, wait at anchor or queue offshore.
+
+  Quality steps down on its own if frames get slow — occlusion first, then bloom,
+  then resolution — so the board keeps moving on weaker hardware.
 - **Blender asset pipeline** (`blender/build_assets.py` + `blender/landmarks.py`) generates all 21 low-poly models in code. Every landmark has its own design:
   - **hubs:** a solar-roofed cross-dock, a cold-chain store with refrigeration units, and a twin-roof distribution centre;
   - **hospitals:** a glass tower with a helipad and an ambulance, and a sandstone campus with green roofs and a sky-bridge;
   - **other sites:** a timber clinic, a pharmacy with a striped awning, a care home with a garden fence, and a factory with pipes and tanks;
   - **port:** a control tower and a lighthouse, plus the container ship, cranes, trucks and props.
 
-  The script exports them as one GLB (`public/models/supplyshock.glb`, about 13k triangles). At load time each model is baked into a single vertex-coloured mesh with soft ground occlusion, so the whole city draws in about 140 draw calls.
+  Every hard edge carries a small chamfer, which is what lets an edge read as an
+  edge under this light. The script exports them as one GLB
+  (`public/models/supplyshock.glb`, about 36k triangles). At load time each model is
+  baked into one vertex-coloured mesh **per surface finish** — matte render, glossy
+  paint, metal, glass, emissive — so a prop costs a handful of draw calls while
+  plaster still reads as plaster and glass as glass.
 
 ## Run it
 
@@ -80,7 +91,7 @@ npm run assets     # rebuild the 3D models (needs Blender on your PATH)
 
 Deployed on Vercel as a static Vite site (`vercel.json`). The Vercel project is linked to this repository, so every push to `main` redeploys the live demo.
 
-The camera frames the whole board in the space the panels leave free, on any screen size; the live event feed opens from the top bar and the route colours sit in the timeline, so nothing covers the map.
+One dark rail holds everything that is always available, one panel carries the current step, one strip reports the live numbers and one bar drives the clock — nothing else is on screen uninvited. The camera frames the whole board in whatever space that chrome leaves free, on any screen size, and refits when you fold the panel away. The live event feed and the route-colour key each open on demand, so neither covers the map.
 
 Controls: drag to orbit, scroll to zoom, click a building for details. <kbd>Space</kbd> plays or pauses, the arrow keys move along the focused timeline, <kbd>Esc</kbd> closes a card.
 
