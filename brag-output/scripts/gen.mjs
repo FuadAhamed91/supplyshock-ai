@@ -220,6 +220,80 @@ const A = {
   questionIn: at('s8', 3),
 };
 
+// --------------------------------------------------------------- highlights
+// "Where do I look?" — each thing the narration names gets marked on screen as
+// it is said. Positions come from tracks.json, recorded frame by frame during
+// capture, so a ring stays on its building while the camera moves and a frame
+// stays on its row while the panel scrolls.
+const TRACKS = JSON.parse(fs.readFileSync(path.join(HERE, 'composition/assets/footage/tracks.json'), 'utf8'));
+const FPS = 30;
+const senEnd = (id, i) => at(id, i) + S[id].sentences[i].dur;
+const HL = [
+  { s: 's2', kind: 'rect', key: 'inspector', from: S.s2.cut + 5.7, to: S.s2.end - 0.3, tone: 'brand', label: 'Live stock, product by product' },
+  { s: 's3', kind: 'rect', key: 'scenarios', from: at('s3', 1), to: at('s3', 2) - 0.3, tone: 'brand', label: 'Pick what breaks' },
+  { s: 's3', kind: 'rect', key: 'slider', from: at('s3', 2) - 0.25, to: A.trigger - 0.05, tone: 'brand', label: 'How long it lasts' },
+  { s: 's3', kind: 'site', key: 'port', from: A.trigger + 0.15, to: S.s3.end - 0.1, tone: 'bad', label: 'Port closed · 4 days' },
+  { s: 's4', kind: 'rect', key: 'stat1', from: at('s4', 1), to: at('s4', 2), tone: 'bad', label: '22 of 70 orders late', edge: 'top' },
+  { s: 's4', kind: 'rect', key: 'stat2', from: at('s4', 2), to: at('s4', 3), tone: 'bad', label: '11 hospital orders late', edge: 'top' },
+  { s: 's4', kind: 'rect', key: 'stat3', from: at('s4', 3), to: at('s4', 4), tone: 'brand', label: '5.1 days to recover' },
+  { s: 's4', kind: 'rect', key: 'cost', from: at('s4', 4), to: at('s4', 5), tone: 'bad', label: '$64k extra cost' },
+  { s: 's4', kind: 'rect', key: 'chain', from: at('s4', 5), to: at('s4', 6), tone: 'bad', label: 'Who runs out, in order' },
+  { s: 's4', kind: 'site', key: 'central', from: at('s4', 6), to: at('s4', 7), tone: 'bad', label: 'Central Hub · out of insulin' },
+  { s: 's4', kind: 'site', key: 'stclara', from: at('s4', 7), to: S.s4.end - 0.15, tone: 'bad', label: 'St. Clara · late order' },
+  { s: 's5', kind: 'rect', key: 'grid', from: at('s5', 3), to: at('s5', 4), tone: 'brand', label: '8 strategies × 40 futures' },
+  { s: 's5', kind: 'rect', key: 'legend', from: at('s5', 4), to: senEnd('s5', 4) + 0.15, tone: 'ok', label: 'Green = every hospital on time' },
+  { s: 's6', kind: 'rect', key: 'res1', from: at('s6', 1), to: at('s6', 2), tone: 'ok', label: 'Late orders 22 → 3' },
+  { s: 's6', kind: 'rect', key: 'res2', from: at('s6', 2), to: at('s6', 3), tone: 'ok', label: 'Hospital orders late 11 → 0' },
+  { s: 's6', kind: 'rect', key: 'res4', from: at('s6', 3), to: at('s6', 4), tone: 'ok', label: 'Cost $64k → $28k' },
+  { s: 's6', kind: 'rect', key: 'whynot', from: at('s6', 4), to: A.rivalIn + 0.4, tone: 'brand', label: 'The plan it turned down' },
+  { s: 's7', kind: 'site', key: 'backup', from: at('s7', 1), to: at('s7', 3), tone: 'ok', label: 'Rush orders · Ridgeway Labs', side: 'left' },
+  { s: 's7', kind: 'site', key: 'north', from: at('s7', 2), to: at('s7', 3), tone: 'ok', label: 'Spare stock · North Hub' },
+  { s: 's7', kind: 'rect', key: 'live', from: at('s7', 3), to: S.s7.end - 0.3, tone: 'ok', label: 'Live score vs doing nothing' },
+];
+
+/** The highlight's box (x, y, w, h) at film time t, or null when its target is off screen. */
+function boxAt(h, t) {
+  const sc = S[h.s];
+  const track = TRACKS[sc.file.replace(/\.mp4$/, '')];
+  if (!track) throw new Error(`no tracks for ${sc.file}`);
+  const f = Math.max(0, Math.min(track.length - 1, Math.round((t - sc.cut + (sc.mediaStart || 0)) * FPS)));
+  if (h.kind === 'rect') {
+    const r = track[f].s[h.key];
+    return r ? [r[0], r[1], r[2], r[3]] : null;
+  }
+  const m = track[f].m[h.key];
+  if (!m) return null;
+  const k = 1.18; // a little outside the site's own ring
+  return [m[0] - m[2] * k, m[1] - m[3] * k, m[2] * 2 * k, m[3] * 2 * k];
+}
+
+const highlights = HL.map((h, n) => {
+  const id = `hl${n}`;
+  const step = 3 / FPS;
+  const samples = [];
+  for (let t = h.from; t <= h.to + 1e-6; t += step) samples.push({ t, b: boxAt(h, t) });
+  const seen = samples.filter((p) => p.b);
+  if (seen.length < samples.length * 0.5) { console.warn(`highlight ${h.key} in ${h.s}: target mostly off screen, skipped`); return null; }
+  // carry the nearest known box through brief gaps, and hide the frame while its target is away
+  let last = seen[0].b;
+  for (const p of samples) { if (p.b) { last = p.b; p.vis = 1; } else { p.b = last; p.vis = 0; } }
+  // Labels sit beside their target on a short leader line. Panel labels clear
+  // the panel (so they never cover the next stat), map labels flip left when
+  // they would run off the frame or across a neighbouring ring.
+  const chipW = h.label.length * 15.5 + 58;
+  const b0 = samples[0].b;
+  const PANEL_EDGE = 470;
+  const lead = h.kind === 'rect' ? Math.max(16, PANEL_EDGE - (b0[0] + b0[2] + 9)) : 18;
+  const left = h.side === 'left' || (h.kind === 'site' && b0[0] + b0[2] + lead + chipW > 1890);
+  // the anchor is where the leader line meets the frame; left-side rows hang off it by their right edge
+  // side-by-side stats lead out along their top edge, so the line never strikes through a neighbour
+  const yAt = (b) => (h.edge === 'top' ? b[1] - 9 : b[1] + b[3] / 2) - 27;
+  const chipAt = (b) => (left
+    ? [b[0] - (h.kind === 'rect' ? 9 : 0), yAt(b)]
+    : [b[0] + b[2] + (h.kind === 'rect' ? 9 : 0), yAt(b)]);
+  return { ...h, id, samples, chipAt, lead, left };
+}).filter(Boolean);
+
 // --------------------------------------------------------------------- html
 const fx = (n) => r3(n).toString();
 const videos = SCENES.map((s, k) => `
@@ -315,6 +389,25 @@ const html = `<!doctype html>
       .verdict b { color: var(--bad); }
       .green { color: var(--ok); }
 
+      /* highlights: a glowing frame (panel) or ring (map) on whatever the narration names */
+      .hl { position: absolute; inset: 0; z-index: 36; pointer-events: none; }
+      .t-bad { --c: #ff5a5f; --g: rgba(229, 72, 77, 0.6); }
+      .t-ok { --c: #3ddc72; --g: rgba(34, 197, 94, 0.55); }
+      .t-brand { --c: #8b93ff; --g: rgba(99, 102, 241, 0.6); }
+      .hl__track { position: absolute; left: 0; top: 0; width: 10px; height: 10px; }
+      .hl__box { position: absolute; inset: -9px; border-radius: 16px; border: 4px solid var(--c);
+        box-shadow: 0 0 0 4000px rgba(8, 12, 20, 0.34), 0 0 28px 6px var(--g); }
+      .hl--site .hl__box { inset: 0; border-radius: 50%; box-shadow: 0 0 26px 6px var(--g), inset 0 0 20px 4px var(--g); }
+      .hl__pulse { position: absolute; inset: 0; border-radius: 50%; border: 4px solid var(--c); }
+      .hl__chiptrack { position: absolute; left: 0; top: 0; }
+      .hl__row { display: flex; align-items: center; }
+      .hl__row--left { flex-direction: row-reverse; position: absolute; right: 0; top: 0; }
+      .hl__line { display: block; height: 3px; border-radius: 2px; background: var(--c); box-shadow: 0 0 10px var(--g); }
+      .hl__chip { display: flex; align-items: center; gap: 12px; padding: 9px 18px 10px 14px; border-radius: 13px;
+        background: rgba(13, 18, 28, 0.94); white-space: nowrap; font-size: 28px; font-weight: 700; color: #fff;
+        letter-spacing: -0.01em; box-shadow: 0 0 0 2px var(--c), 0 14px 34px rgba(8, 12, 20, 0.35); }
+      .hl__dot { display: block; width: 13px; height: 13px; border-radius: 50%; background: var(--c); box-shadow: 0 0 12px var(--g); }
+
       /* title + end card */
       .scrim { position: absolute; inset: 0; z-index: 60; background: radial-gradient(ellipse 70% 60% at 50% 46%, rgba(16, 21, 32, 0.82), rgba(16, 21, 32, 0.55)); }
       .endbg { position: absolute; inset: 0; z-index: 60; background: var(--graphite); }
@@ -341,6 +434,10 @@ ${videos}
       <div class="flash clip" id="flash" data-start="${fx(A.trigger)}" data-duration="1.4"></div>
       <div class="fade-in clip" id="fadein" data-start="0" data-duration="1.4"></div>
 ${chapters}
+${highlights.map((h) => `      <div class="hl hl--${h.kind} t-${h.tone} clip" id="${h.id}" data-start="${fx(h.from)}" data-duration="${fx(h.to - h.from)}">
+        <div class="hl__track" id="${h.id}-t"><div class="hl__box" id="${h.id}-b"></div>${h.kind === 'site' ? `<div class="hl__pulse" id="${h.id}-p"></div>` : ''}</div>
+        <div class="hl__chiptrack" id="${h.id}-ct"><div class="hl__row${h.left ? ' hl__row--left' : ''}" id="${h.id}-c"><span class="hl__line" style="width:${Math.round(h.lead)}px"></span><span class="hl__chip"><span class="hl__dot"></span>${esc(h.label)}</span></div></div>
+      </div>`).join('\n')}
       <div class="replay clip" id="replay" data-start="${fx(A.replayFrom)}" data-duration="${fx(A.replayTo - A.replayFrom)}"><span class="replay__pill" id="replayp">Real results · replayed at reading speed</span></div>
 
       <!-- 04: the scale of the search -->
@@ -447,6 +544,30 @@ ${subs.filter((c) => c.start < hideSubsFrom).map((c, i) => `      tl.fromTo("#su
       tl.fromTo("#co-safe-card", { x: 60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.6, ease: E }, ${fx(A.saferIn)});
       tl.fromTo("#safe-b", { scale: 0.5, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.5, ease: "back.out(2)" }, ${fx(A.saferIn + 0.7)});
       tl.to("#co-safe-card", { opacity: 0, x: 40, duration: 0.4, ease: "power2.in" }, ${fx(S.s8.cut - 0.45)});
+
+      // highlights: placed from the capture's per-frame tracks
+${highlights.map((h) => {
+  const r = (n) => Math.round(n);
+  const s0 = h.samples[0];
+  const [cx0, cy0] = h.chipAt(s0.b);
+  const moving = h.samples.some((p) => p.b.some((v, k) => Math.abs(v - s0.b[k]) > 0.5) || p.vis !== s0.vis);
+  const lines = [
+    `      tl.set("#${h.id}-t", { x: ${r(s0.b[0])}, y: ${r(s0.b[1])}, width: ${r(s0.b[2])}, height: ${r(s0.b[3])}, opacity: ${s0.vis} }, ${fx(h.from)});`,
+    `      tl.set("#${h.id}-ct", { x: ${r(cx0)}, y: ${r(cy0)}, opacity: ${s0.vis} }, ${fx(h.from)});`,
+  ];
+  if (moving) {
+    const step = h.samples.length > 1 ? h.samples[1].t - h.samples[0].t : 0.1;
+    const kf = h.samples.slice(1).map((p) => `{ x: ${r(p.b[0])}, y: ${r(p.b[1])}, width: ${r(p.b[2])}, height: ${r(p.b[3])}, opacity: ${p.vis}, duration: ${fx(step)}, ease: "none" }`);
+    const kc = h.samples.slice(1).map((p) => { const [x, y] = h.chipAt(p.b); return `{ x: ${r(x)}, y: ${r(y)}, opacity: ${p.vis}, duration: ${fx(step)}, ease: "none" }`; });
+    lines.push(`      tl.to("#${h.id}-t", { keyframes: [${kf.join(', ')}] }, ${fx(h.from)});`);
+    lines.push(`      tl.to("#${h.id}-ct", { keyframes: [${kc.join(', ')}] }, ${fx(h.from)});`);
+  }
+  lines.push(`      tl.fromTo("#${h.id}-b", { opacity: 0, scale: 1.08 }, { opacity: 1, scale: 1, duration: 0.35, ease: E }, ${fx(h.from)});`);
+  lines.push(`      tl.fromTo("#${h.id}-c", { opacity: 0, x: 14 }, { opacity: 1, x: 0, duration: 0.35, ease: E }, ${fx(h.from + 0.08)});`);
+  if (h.kind === 'site') lines.push(`      tl.fromTo("#${h.id}-p", { opacity: 0.9, scale: 1 }, { opacity: 0, scale: 1.7, duration: 1.0, ease: "power2.out" }, ${fx(h.from)});`);
+  lines.push(`      tl.to(["#${h.id}-b", "#${h.id}-c"], { opacity: 0, duration: 0.22, ease: "power2.in" }, ${fx(h.to - 0.22)});`);
+  return lines.join('\n');
+}).join('\n')}
 
       // end card
       tl.fromTo("#end-bg", { opacity: 0 }, { opacity: 0.94, duration: 1.0, ease: "power2.inOut" }, ${fx(A.endIn)});

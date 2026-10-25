@@ -56,9 +56,66 @@ await js(`
       const p = w.camera.position, t = w.controls.target;
       return { p: [p.x, p.y, p.z], t: [t.x, t.y, t.z] };
     },
+    // Where the film's highlights go, read off the frame just rendered: panel
+    // parts as screen rectangles (only when mostly in view in the scrolling
+    // panel), and sites as the on-screen ellipse of their ground ring.
+    track() {
+      const SEL = {
+        inspector: '.inspector:not([hidden]) .sku-rows',
+        scenarios: '.scenarios',
+        slider: '.config',
+        trigger: '[data-act="trigger"]',
+        stat1: '.stats .stat:nth-child(1)',
+        stat2: '.stats .stat:nth-child(2)',
+        stat3: '.stats .stat:nth-child(3)',
+        cost: '.cost-line',
+        chain: '.timeline-list',
+        grid: '#think-grid',
+        legend: '.thinking__legend',
+        res1: '.plan .results .result:nth-child(1)',
+        res2: '.plan .results .result:nth-child(2)',
+        res3: '.plan .results .result:nth-child(3)',
+        res4: '.plan .results .result:nth-child(4)',
+        whynot: '.why-not',
+        live: '#live-note',
+      };
+      const SITES = ['port', 'central', 'north', 'south', 'backup', 'stclara', 'riverside'];
+      const out = { s: {}, m: {} };
+      const panel = document.getElementById('panel');
+      const pr = panel && !panel.hidden ? panel.getBoundingClientRect() : null;
+      for (const [k, sel] of Object.entries(SEL)) {
+        const el = document.querySelector(sel);
+        const r = el && el.offsetParent !== null ? el.getBoundingClientRect() : null;
+        if (!r || r.width < 2 || r.height < 2) { out.s[k] = null; continue; }
+        if (pr && panel.contains(el) && !el.closest('.sticky-actions')) {
+          const seen = Math.min(r.bottom, pr.bottom - 70) - Math.max(r.top, pr.top + 4); // the sticky footer covers the bottom
+          if (seen < r.height * 0.7) { out.s[k] = null; continue; }
+        }
+        out.s[k] = [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
+      }
+      const cam = window.__world.camera;
+      cam.updateMatrixWorld();
+      const V = cam.position.constructor;
+      const sites = window.__supplyshock.map.sites.sites;
+      const P = (v) => { const p = v.clone().project(cam); return [(p.x + 1) / 2 * innerWidth, (1 - p.y) / 2 * innerHeight]; };
+      for (const id of SITES) {
+        const e = sites[id];
+        if (!e) continue;
+        const c = e.ring.getWorldPosition(new V());
+        const R = e.ring.geometry.parameters.outerRadius;
+        const pc = P(c), px = P(c.clone().add(new V(R, 0, 0))), pz = P(c.clone().add(new V(0, 0, R)));
+        out.m[id] = [+pc[0].toFixed(1), +pc[1].toFixed(1), +Math.hypot(px[0] - pc[0], px[1] - pc[1]).toFixed(1), +Math.hypot(pz[0] - pc[0], pz[1] - pc[1]).toFixed(1)];
+      }
+      return out;
+    },
   };
 `);
 console.log('app ready');
+
+// Highlight tracks and the run's numbers, merged into what earlier runs saved,
+// so re-shooting one scene keeps every other scene's data.
+const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return {}; } };
+const tracks = readJson(path.join(OUT, 'tracks.json'));
 
 /** Slow orbit around the current target: keeps a static panel scene alive. */
 function orbitAt(base, frac, sweepDeg, rise = 0) {
@@ -99,19 +156,22 @@ async function record(name, seconds, onFrame, clock) {
   ], { stdio: ['pipe', 'ignore', 'ignore'] });
 
   const t0 = Date.now();
+  const track = [];
   for (let i = 0; i < frames; i++) {
     if (onFrame) await onFrame(i / frames, i, frames);
     await stepFrame(cdp, 1000 / FPS);
     const buf = await grab(cdp, 92);
+    track.push(await cdp.evaluate('window.__film.track()')); // same state as the frame just grabbed
     if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once('drain', r));
   }
+  tracks[name] = track;
   ff.stdin.end();
   await new Promise((r) => ff.on('close', r));
   const secs = ((Date.now() - t0) / 1000).toFixed(0);
   console.log(`  ${name}.mp4  ${seconds}s / ${frames}f  (captured in ${secs}s)`);
 }
 
-const facts = {};
+const facts = readJson(path.join(OUT, 'facts.json'));
 
 // --------------------------------------------------------------- the scenes
 const SCENES = {
@@ -343,6 +403,7 @@ for (const key of order) {
 }
 
 fs.writeFileSync(path.join(OUT, 'facts.json'), JSON.stringify(facts, null, 2));
+fs.writeFileSync(path.join(OUT, 'tracks.json'), JSON.stringify(tracks));
 console.log('facts written');
 cdp.close();
 process.exit(0);

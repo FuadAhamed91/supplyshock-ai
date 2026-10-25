@@ -5,5 +5,17 @@
     "simulations": 328,
     "ms": 0,
     "panelText": "STEP 3 · RECOVER WITH AI\nYour recovery plan\n\nPicked from 8 strategies, each played out across 40 possible futures from the moment the disruption hits. Different goals favour different plans:\n\nBalanced & fastest\nCheapest & greenest\nAI recommended\nBackup supplier + Rebalance stock + Hospitals first\nBest for\nBalanced\nFastest\n\nRidgeway Labs fills the gap while ships can’t unload, spare stock moves from North Hub to the hubs that run low first and scarce stock goes to hospitals first.\n\nRush order from Ridgeway Labs\n3,560 units in 8 batches, first trucks out 8 h after ordering · +40% unit cost\nMove stock to where it’s needed\nNorth → South 432 · North → Central 168 units\nHospitals first\nHospital orders ship first and half a day of their demand is held back, until a day after the disruption ends\nLate orders\n22 → 3\n↓ 86%\nHospital orders late\n11 → 0\n↓ 100%\nBack to normal\n5.1 days → 4.7 days\n↓ 8%\nDisruption cost\n$64k → $28k\n↓ 56%\nEvery hospital order on time\n100% of 40 futures\n\nWhy not “Backup supplier + Rebalance stock”? Fewer late orders in the expected week (0 vs 3), but a hospital order goes late in 19 of 40 futures.\n\nCompare all 8 strategies\nApply plan and watch the recovery"
+  },
+  "impact": {
+    "late": 22,
+    "orders": 70,
+    "critLate": 11,
+    "recoveryH": 123.499223058328,
+    "recovered": true,
+    "chain": 5,
+    "panelText": "STEP 2 · SEE THE RIPPLE\nPort congestion\nStarts Day 1 · 06:30 · lasts about 4 days\n\nBayport Terminal can’t berth ships for about 4 days (storm backlog at the terminal).\n\nIF YOU DO NOTHING\nLate orders\n22\nof 70\nFor hospitals\n11\npatients wait\nBack to normal\n5.1 days\nafter it starts\nCosts about $64k · in a bad week (1 in 10 futures) 37 orders go late\nHOW THE SHOCK SPREADS\nDay 1 · 06:30\nPort congestion\nDay 2 · 14:00\nCentral Hub runs out of insulin\nDay 2 · 14:00\nSouth Hub runs out of insulin\nDay 3 · 13:00\nSt. Clara Hospital gets a late order\nDay 3 · 13:00\nRiverside Hospital gets a late order\nORDERS OVERDUE, HOUR BY HOUR\n0\n12\n23\nD1\nD2\nD3\nD4\nD5\nD6\nD7\nD8\nnow\nDo nothing\nNormal week\nDisruption\nFind recovery plans with AI\nWatch it unfold with no plan"
+  },
+  "final": {
+    "panelText": "STEP 4 · WATCH & SHARE\nBackup supplier + Rebalance stock + Hospitals first is running\n\nGreen trucks and routes are the AI plan in action. Watch the hub stock piles and hospital labels hold steady.\n\nSo far: 0 hospital orders late (11 without the plan) · 3 late overall (22)\nNO PLAN → WITH PLAN\nLate orders\n22 → 3\n↓ 86%\nHospital orders late\n11 → 0\n↓ 100%\nBack to normal\n5.1 days → 4.7 days\n↓ 8%\nDisruption cost\n$64k → $28k\n↓ 56%\nORDERS OVERDUE, HOUR BY HOUR\n0\n12\n23\nD1\nD2\nD3\nD4\nD5\nD6\nD7\nD8\nnow\nDo nothing\nWith plan\nDownload report (PDF)\nCopy summary\nNew test"
   }
 }

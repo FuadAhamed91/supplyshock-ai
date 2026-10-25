@@ -84,11 +84,23 @@ See `brag-plan.md`. Cut list as rendered (`timeline.json`):
   (`impactSoft_medium_001`, 0.42)
 - Restraint rule: nothing competes with the voice
 
+## Highlights
+Twenty "look here" marks, each on screen for the sentence that names its target:
+a glowing frame with a slight dim on panel items (stats, results rows, the "Why not…?"
+line, the live score), and a pulsing ring on map sites (the port, Central Hub, St. Clara
+Hospital, Ridgeway Labs, North Hub), each with a short label on a leader line. Positions
+come from `composition/assets/footage/tracks.json`, recorded on every captured frame —
+panel elements as screen rectangles (only when mostly in view in the scrolling panel),
+sites as the projected ellipse of their ground ring — so a ring stays on its building
+while the camera moves and a frame stays on its row while the panel scrolls.
+
 ## Subtitles
 Burned in, bottom centre above the app's scrub bar, max two balanced lines, numbers
 shown as numerals (the narration spells them out for pronunciation). The closing
 question is set as the end card instead of a subtitle.
 
 ## Build
+`node scripts/film.mjs` (with the app's dev server running) captures the footage, facts and
+highlight tracks; `node scripts/vo-build.mjs` builds the narration;
 `node scripts/gen.mjs` regenerates `composition/index.html` from the measured narration;
 `npx hyperframes check` is the gate (passes, 0 errors).
