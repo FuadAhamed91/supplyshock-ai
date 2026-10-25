@@ -1,0 +1,2 @@
+SupplyShock AI. When one link breaks, who runs out first?
+Break a supply chain on a live 3D map, watch the shock reach the hospitals, then let an AI planner rehearse 328 recoveries in under a second — it even turns down the plan with zero late orders because a hospital waits in 19 of 40 futures.

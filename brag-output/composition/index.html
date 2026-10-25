@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en" data-resolution="landscape">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>SupplyShock AI — demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: "Inter"; src: url("assets/fonts/Inter-400.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+      @font-face { font-family: "Inter"; src: url("assets/fonts/Inter-700.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: block; }
+      :root {
+        --graphite: #101520;
+        --ink: #ffffff;
+        --brand: #4f46e5;
+        --brand-hi: #a5b4fc;
+        --ok: #22c55e;
+        --bad: #e5484d;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--graphite); }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; font-family: "Inter", sans-serif; color: var(--ink); background: var(--graphite); }
+
+      /* footage */
+      .vwrap { position: absolute; inset: 0; }
+      .vwrap video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+      .vignette { position: absolute; inset: 0; z-index: 30; pointer-events: none;
+        background: radial-gradient(ellipse 75% 70% at 50% 48%, rgba(10, 14, 22, 0) 60%, rgba(10, 14, 22, 0.26) 100%); }
+      .fade-in { position: absolute; inset: 0; z-index: 70; background: var(--graphite); }
+      .flash { position: absolute; inset: 0; z-index: 31; pointer-events: none;
+        box-shadow: inset 0 0 260px 40px rgba(229, 72, 77, 0.55); }
+
+      /* chapter kicker: top centre, clear of the app's panel and live-numbers strip */
+      .chapter { position: absolute; left: 0; right: 0; top: 30px; z-index: 41; display: flex; justify-content: center; }
+      .chapter__pill { display: block; padding: 11px 22px; border-radius: 999px; background: rgba(16, 21, 32, 0.88);
+        font-size: 28px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #e2e8f0;
+        box-shadow: 0 10px 30px rgba(10, 14, 22, 0.25); }
+      .replay { position: absolute; left: 0; right: 0; top: 30px; z-index: 41; display: flex; justify-content: center; }
+      .replay__pill { display: block; padding: 10px 20px; border-radius: 999px; background: rgba(79, 70, 229, 0.92);
+        font-size: 28px; font-weight: 700; letter-spacing: 0.01em; color: #fff; box-shadow: 0 10px 30px rgba(79, 70, 229, 0.35); }
+
+      /* subtitles: bottom centre, above the app's scrub bar */
+      .sub { position: absolute; left: 0; right: 0; bottom: 110px; z-index: 65; display: flex; justify-content: center; }
+      .sub__box { display: flex; flex-direction: column; align-items: center; gap: 4px; max-width: 1280px; padding: 12px 26px 13px;
+        border-radius: 16px; background: rgba(13, 18, 28, 0.84); box-shadow: 0 12px 34px rgba(10, 14, 22, 0.28); }
+      .sub__box span { display: block; font-size: 38px; line-height: 1.24; font-weight: 400; letter-spacing: -0.005em; color: #fff; text-align: center; white-space: nowrap; }
+
+      /* right-hand callout cards */
+      .callout { position: absolute; right: 70px; top: 200px; width: 640px; z-index: 40; display: flex; }
+      .card { display: block; width: 100%; padding: 34px 38px 36px; border-radius: 26px; background: rgba(16, 21, 32, 0.93);
+        box-shadow: 0 30px 80px rgba(10, 14, 22, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+      .card__kicker { display: block; font-size: 28px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #94a3b8; }
+      .card__big { display: block; font-size: 150px; line-height: 1; font-weight: 700; letter-spacing: -0.045em; margin-top: 14px; }
+      .card__label { display: block; font-size: 30px; font-weight: 700; letter-spacing: -0.01em; margin-top: 10px; }
+      .card__sub { display: block; font-size: 28px; font-weight: 400; color: #94a3b8; margin-top: 10px; line-height: 1.4; }
+      .card__plan { display: block; font-size: 28px; font-weight: 700; margin-top: 12px; letter-spacing: -0.01em; }
+      .card__row { display: flex; align-items: baseline; gap: 16px; margin-top: 16px; }
+      .card__zero { display: block; font-size: 64px; font-weight: 700; letter-spacing: -0.03em; color: var(--ok); }
+      .card__zerol { display: block; font-size: 30px; color: #cbd5e1; }
+      .stamp { display: block; position: absolute; right: 26px; top: -26px; padding: 8px 18px; border-radius: 10px; border: 3px solid var(--bad); background: #1a0f14;
+        color: var(--bad); font-size: 28px; font-weight: 700; letter-spacing: 0.12em; }
+      .futures { display: grid; grid-template-columns: repeat(10, 1fr); gap: 9px; margin-top: 24px; }
+      .futures i { display: block; aspect-ratio: 1; border-radius: 6px; background: #334155; }
+      .verdict { display: block; margin-top: 22px; font-size: 32px; font-weight: 700; color: #fecaca; letter-spacing: -0.01em; }
+      .verdict b { color: var(--bad); }
+      .green { color: var(--ok); }
+
+      /* title + end card */
+      .scrim { position: absolute; inset: 0; z-index: 60; background: radial-gradient(ellipse 70% 60% at 50% 46%, rgba(16, 21, 32, 0.82), rgba(16, 21, 32, 0.55)); }
+      .endbg { position: absolute; inset: 0; z-index: 60; background: var(--graphite); }
+      .lockup { position: absolute; inset: 0; z-index: 61; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+      .mark { display: block; width: 96px; height: 96px; border-radius: 26px; position: relative;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 60%), conic-gradient(from 210deg, #4f46e5, #6366f1, #22c55e, #4f46e5);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4), 0 18px 50px rgba(79, 70, 229, 0.5); }
+      .mark::after { content: ""; position: absolute; inset: 26px; border: 5px solid #fff; border-radius: 8px; transform: rotate(45deg); }
+      .name { display: block; margin-top: 34px; font-size: 118px; line-height: 1; font-weight: 700; letter-spacing: -0.045em; }
+      .name em { font-style: normal; color: var(--brand-hi); }
+      .tag { display: block; margin-top: 22px; font-size: 32px; font-weight: 400; color: #cbd5e1; letter-spacing: -0.005em; }
+      .question { display: block; margin-top: 46px; max-width: 1400px; text-wrap: balance; font-size: 76px; line-height: 1.08; font-weight: 700; letter-spacing: -0.035em; }
+      .url { display: block; margin-top: 40px; padding: 14px 28px; border-radius: 999px; background: rgba(255, 255, 255, 0.08);
+        font-size: 28px; font-weight: 700; letter-spacing: 0.01em; color: #e2e8f0; }
+      .end-name { display: block; margin-top: 26px; font-size: 44px; font-weight: 700; letter-spacing: -0.03em; }
+      .end-name em { font-style: normal; color: var(--brand-hi); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="150">
+
+      <div class="vwrap" id="vw-s1" style="z-index:20">
+        <video id="v-s1" class="clip" src="assets/footage/s1-cold-open.mp4" data-start="0" data-duration="13" data-track-index="0" muted playsinline></video>
+      </div>
+      <div class="vwrap" id="vw-s2" style="z-index:19">
+        <video id="v-s2" class="clip" src="assets/footage/s2-normal-week.mp4" data-start="12.787" data-duration="14.838" data-track-index="1" muted playsinline></video>
+      </div>
+      <div class="vwrap" id="vw-s3" style="z-index:18">
+        <video id="v-s3" class="clip" src="assets/footage/s3-break-a-link.mp4" data-start="27.126" data-duration="15.421" data-media-start="0.8" data-track-index="0" muted playsinline></video>
+      </div>
+      <div class="vwrap" id="vw-s4" style="z-index:17">
+        <video id="v-s4" class="clip" src="assets/footage/s4-the-ripple.mp4" data-start="42.047" data-duration="22.593" data-track-index="1" muted playsinline></video>
+      </div>
+      <div class="vwrap" id="vw-s5" style="z-index:16">
+        <video id="v-s5" class="clip" src="assets/footage/s5-the-planner.mp4" data-start="64.139" data-duration="30" data-track-index="0" muted playsinline></video>
+      </div>
+      <div class="vwrap" id="vw-s6" style="z-index:15">
+        <video id="v-s6" class="clip" src="assets/footage/s6-the-plan.mp4" data-start="94.139" data-duration="26" data-track-index="1" muted playsinline></video>
+      </div>
+      <div class="vwrap" id="vw-s7" style="z-index:14">
+        <video id="v-s7" class="clip" src="assets/footage/s7-recovery.mp4" data-start="120.139" data-duration="18.361" data-track-index="0" muted playsinline></video>
+      </div>
+      <div class="vwrap" id="vw-s8" style="z-index:13">
+        <video id="v-s8" class="clip" src="assets/footage/s8-close.mp4" data-start="138" data-duration="12" data-track-index="1" muted playsinline></video>
+      </div>
+
+      <div class="vignette" id="vignette"></div>
+      <div class="flash clip" id="flash" data-start="35.326" data-duration="1.4"></div>
+      <div class="fade-in clip" id="fadein" data-start="0" data-duration="1.4"></div>
+
+      <div class="chapter clip" id="ch-s2" data-start="13.137" data-duration="3.6"><span class="chapter__pill" id="chp-s2">01 · The network</span></div>
+      <div class="chapter clip" id="ch-s3" data-start="27.476" data-duration="3.6"><span class="chapter__pill" id="chp-s3">02 · Break a link</span></div>
+      <div class="chapter clip" id="ch-s4" data-start="42.397" data-duration="3.6"><span class="chapter__pill" id="chp-s4">03 · The ripple</span></div>
+      <div class="chapter clip" id="ch-s5" data-start="64.489" data-duration="3.6"><span class="chapter__pill" id="chp-s5">04 · The AI planner</span></div>
+      <div class="chapter clip" id="ch-s6" data-start="94.489" data-duration="3.6"><span class="chapter__pill" id="chp-s6">05 · The plan</span></div>
+      <div class="chapter clip" id="ch-s7" data-start="120.489" data-duration="3.6"><span class="chapter__pill" id="chp-s7">06 · The recovery</span></div>
+      <div class="replay clip" id="replay" data-start="68.339" data-duration="22.8"><span class="replay__pill" id="replayp">Real results · replayed at reading speed</span></div>
+
+      <!-- 04: the scale of the search -->
+      <div class="callout clip" id="co-sims" data-start="87.265" data-duration="6.875">
+        <div class="card" id="co-sims-card">
+          <span class="card__kicker">Rehearsed in your browser</span>
+          <span class="card__big" id="sims-n">0</span>
+          <span class="card__label">simulated weeks</span>
+          <span class="card__sub">8 strategies × 40 futures + the expected week. Under a second. No server.</span>
+        </div>
+      </div>
+
+      <!-- 05: the plan it turned down -->
+      <div class="callout clip" id="co-rival" data-start="109.841" data-duration="10.298">
+        <div class="card" id="co-rival-card" style="position:relative">
+          <span class="card__kicker">The tempting plan</span>
+          <span class="card__plan">Backup supplier + Rebalance stock</span>
+          <div class="card__row"><span class="card__zero">0</span><span class="card__zerol">late orders in the expected week</span></div>
+          <span class="stamp" id="stamp">REJECTED</span>
+          <div class="futures" id="futures"><i class="bad" id="fut-0"></i><i class="ok" id="fut-1"></i><i class="ok" id="fut-2"></i><i class="bad" id="fut-3"></i><i class="ok" id="fut-4"></i><i class="bad" id="fut-5"></i><i class="ok" id="fut-6"></i><i class="bad" id="fut-7"></i><i class="ok" id="fut-8"></i><i class="bad" id="fut-9"></i><i class="ok" id="fut-10"></i><i class="bad" id="fut-11"></i><i class="ok" id="fut-12"></i><i class="bad" id="fut-13"></i><i class="ok" id="fut-14"></i><i class="bad" id="fut-15"></i><i class="ok" id="fut-16"></i><i class="bad" id="fut-17"></i><i class="ok" id="fut-18"></i><i class="bad" id="fut-19"></i><i class="ok" id="fut-20"></i><i class="bad" id="fut-21"></i><i class="ok" id="fut-22"></i><i class="ok" id="fut-23"></i><i class="bad" id="fut-24"></i><i class="ok" id="fut-25"></i><i class="bad" id="fut-26"></i><i class="ok" id="fut-27"></i><i class="bad" id="fut-28"></i><i class="ok" id="fut-29"></i><i class="bad" id="fut-30"></i><i class="ok" id="fut-31"></i><i class="bad" id="fut-32"></i><i class="ok" id="fut-33"></i><i class="bad" id="fut-34"></i><i class="ok" id="fut-35"></i><i class="bad" id="fut-36"></i><i class="ok" id="fut-37"></i><i class="bad" id="fut-38"></i><i class="ok" id="fut-39"></i></div>
+          <span class="verdict" id="verdict">A hospital waits in <b>19 of 40</b> futures.</span>
+        </div>
+      </div>
+
+      <!-- 06: the outcome that matters -->
+      <div class="callout clip" id="co-safe" data-start="131.567" data-duration="6.433">
+        <div class="card" id="co-safe-card">
+          <span class="card__kicker">Hospital orders late</span>
+          <span class="card__big"><span id="safe-a">11</span> <span style="color:#64748b">→</span> <span class="green" id="safe-b">0</span></span>
+          <span class="card__sub">With the plan, every hospital order arrives on time in 40 of 40 futures.</span>
+        </div>
+      </div>
+
+      <div class="sub clip" id="sub-0" data-start="1" data-duration="5.807"><div class="sub__box" id="subb-0"><span>A ship stuck outside a port on Monday can</span><span>leave a hospital without insulin by Wednesday.</span></div></div>
+      <div class="sub clip" id="sub-1" data-start="6.807" data-duration="4.38"><div class="sub__box" id="subb-1"><span>The chain between those two</span><span>facts is invisible, until it breaks.</span></div></div>
+      <div class="sub clip" id="sub-2" data-start="13.237" data-duration="3.972"><div class="sub__box" id="subb-2"><span>Large distributors run</span><span>planning suites that model this.</span></div></div>
+      <div class="sub clip" id="sub-3" data-start="17.209" data-duration="5.306"><div class="sub__box" id="subb-3"><span>Everyone else finds out when a customer</span><span>calls about a delivery that never arrived.</span></div></div>
+      <div class="sub clip" id="sub-4" data-start="22.515" data-duration="4.638"><div class="sub__box" id="subb-4"><span>This is a regional medical-supply</span><span>network, running an ordinary week.</span></div></div>
+      <div class="sub clip" id="sub-5" data-start="27.576" data-duration="1.597"><div class="sub__box" id="subb-5"><span>So break one link.</span></div></div>
+      <div class="sub clip" id="sub-6" data-start="29.172" data-duration="4.16"><div class="sub__box" id="subb-6"><span>Close the port, shut a hub,</span><span>close a bridge, or cut a supplier.</span></div></div>
+      <div class="sub clip" id="sub-7" data-start="33.332" data-duration="2.757"><div class="sub__box" id="subb-7"><span>Choose how long it lasts, and watch it hit.</span></div></div>
+      <div class="sub clip" id="sub-8" data-start="36.089" data-duration="3.775"><div class="sub__box" id="subb-8"><span>The clock stops, the shock spreads</span><span>out from the terminal, and every</span></div></div>
+      <div class="sub clip" id="sub-9" data-start="39.864" data-duration="2.209"><div class="sub__box" id="subb-9"><span>route that depended on it turns red.</span></div></div>
+      <div class="sub clip" id="sub-10" data-start="42.497" data-duration="2.858"><div class="sub__box" id="subb-10"><span>Then it tells you what doing nothing costs.</span></div></div>
+      <div class="sub clip" id="sub-11" data-start="45.355" data-duration="3.019"><div class="sub__box" id="subb-11"><span>22 orders late, out of 70.</span></div></div>
+      <div class="sub clip" id="sub-12" data-start="48.373" data-duration="2.367"><div class="sub__box" id="subb-12"><span>11 of them for hospitals.</span></div></div>
+      <div class="sub clip" id="sub-13" data-start="50.74" data-duration="2.012"><div class="sub__box" id="subb-13"><span>5 days to recover.</span></div></div>
+      <div class="sub clip" id="sub-14" data-start="52.752" data-duration="2.115"><div class="sub__box" id="subb-14"><span>$64,000.</span></div></div>
+      <div class="sub clip" id="sub-15" data-start="54.866" data-duration="2.622"><div class="sub__box" id="subb-15"><span>And it names the casualties in order.</span></div></div>
+      <div class="sub clip" id="sub-16" data-start="57.488" data-duration="3.307"><div class="sub__box" id="subb-16"><span>Day 2: Central Hub runs out of insulin.</span></div></div>
+      <div class="sub clip" id="sub-17" data-start="60.796" data-duration="3.371"><div class="sub__box" id="subb-17"><span>Day 3: St. Clara Hospital gets a late order.</span></div></div>
+      <div class="sub clip" id="sub-18" data-start="64.589" data-duration="2.122"><div class="sub__box" id="subb-18"><span>Now the planner goes to work.</span></div></div>
+      <div class="sub clip" id="sub-19" data-start="66.712" data-duration="1.828"><div class="sub__box" id="subb-19"><span>This is not a chatbot.</span></div></div>
+      <div class="sub clip" id="sub-20" data-start="68.54" data-duration="2.949"><div class="sub__box" id="subb-20"><span>It is a simulation-based planning agent.</span></div></div>
+      <div class="sub clip" id="sub-21" data-start="71.489" data-duration="5.573"><div class="sub__box" id="subb-21"><span>It takes every combination of 4 recovery</span><span>levers, and plays each one out across 40</span></div></div>
+      <div class="sub clip" id="sub-22" data-start="77.062" data-duration="6.421"><div class="sub__box" id="subb-22"><span>randomised futures, where demand, travel</span><span>times, and the disruption’s real length all vary.</span></div></div>
+      <div class="sub clip" id="sub-23" data-start="83.483" data-duration="3.782"><div class="sub__box" id="subb-23"><span>Green means every</span><span>hospital order arrived on time.</span></div></div>
+      <div class="sub clip" id="sub-24" data-start="87.265" data-duration="4.97"><div class="sub__box" id="subb-24"><span>328 simulations, in under</span><span>a second, in your browser.</span></div></div>
+      <div class="sub clip" id="sub-25" data-start="92.234" data-duration="2.688"><div class="sub__box" id="subb-25"><span>Slowed down here, so you can watch it think.</span></div></div>
+      <div class="sub clip" id="sub-26" data-start="95.346" data-duration="2.67"><div class="sub__box" id="subb-26"><span>Then it picks one, and it shows its work.</span></div></div>
+      <div class="sub clip" id="sub-27" data-start="98.016" data-duration="2.903"><div class="sub__box" id="subb-27"><span>22 late orders become 3.</span></div></div>
+      <div class="sub clip" id="sub-28" data-start="100.919" data-duration="3.129"><div class="sub__box" id="subb-28"><span>11 late hospital orders become none.</span></div></div>
+      <div class="sub clip" id="sub-29" data-start="104.048" data-duration="3.298"><div class="sub__box" id="subb-29"><span>$64,000 becomes $28,000.</span></div></div>
+      <div class="sub clip" id="sub-30" data-start="107.346" data-duration="2.495"><div class="sub__box" id="subb-30"><span>And here is the part that matters.</span></div></div>
+      <div class="sub clip" id="sub-31" data-start="109.841" data-duration="5.474"><div class="sub__box" id="subb-31"><span>Another plan had zero late orders in the</span><span>expected week, better than the one it chose.</span></div></div>
+      <div class="sub clip" id="sub-32" data-start="115.315" data-duration="5.426"><div class="sub__box" id="subb-32"><span>It rejected it anyway, because in</span><span>19 of 40 futures, a hospital waits.</span></div></div>
+      <div class="sub clip" id="sub-33" data-start="121.164" data-duration="4.154"><div class="sub__box" id="subb-33"><span>Apply it, and the week replays</span><span>from the moment the disruption hit.</span></div></div>
+      <div class="sub clip" id="sub-34" data-start="125.318" data-duration="2.391"><div class="sub__box" id="subb-34"><span>Green is the plan in action.</span></div></div>
+      <div class="sub clip" id="sub-35" data-start="127.709" data-duration="3.858"><div class="sub__box" id="subb-35"><span>Rush orders and spare stock,</span><span>moving to where they’re needed.</span></div></div>
+      <div class="sub clip" id="sub-36" data-start="131.567" data-duration="3.91"><div class="sub__box" id="subb-36"><span>The hubs hold, the hospitals stay</span><span>on schedule, and it keeps score</span></div></div>
+      <div class="sub clip" id="sub-37" data-start="135.476" data-duration="2.349"><div class="sub__box" id="subb-37"><span>against doing nothing, hour by hour.</span></div></div>
+      <div class="sub clip" id="sub-38" data-start="138.248" data-duration="1.175"><div class="sub__box" id="subb-38"><span>No server.</span></div></div>
+      <div class="sub clip" id="sub-39" data-start="139.423" data-duration="1.812"><div class="sub__box" id="subb-39"><span>No API keys.</span></div></div>
+      <div class="sub clip" id="sub-40" data-start="141.235" data-duration="4.365"><div class="sub__box" id="subb-40"><span>One browser tab, and an answer</span><span>to the only question that matters.</span></div></div>
+
+      <!-- title card, held in the pause after the hook -->
+      <div class="scrim clip" id="title-scrim" data-start="10.487" data-duration="3.2"></div>
+      <div class="lockup clip" id="title" data-start="10.487" data-duration="3.2">
+        <span class="mark" id="title-mark"></span>
+        <span class="name" id="title-name">SupplyShock <em>AI</em></span>
+        <span class="tag" id="title-tag">A disruption simulator for medical-supply distributors</span>
+      </div>
+
+      <!-- end card -->
+      <div class="endbg clip" id="end-bg" data-start="141.235" data-duration="8.765"></div>
+      <div class="lockup clip" id="end" data-start="141.235" data-duration="8.765">
+        <span class="mark" id="end-mark"></span>
+        <span class="end-name" id="end-name">SupplyShock <em>AI</em></span>
+        <span class="question" id="end-q">When one link breaks, who runs out first?</span>
+        <span class="url" id="end-url">supplyshock-ai.vercel.app</span>
+      </div>
+
+      <audio id="vo-s1" src="assets/vo/s1.wav" data-start="1" data-duration="10.037" data-track-index="10" data-volume="1"></audio>
+      <audio id="vo-s2" src="assets/vo/s2.wav" data-start="13.237" data-duration="13.765" data-track-index="10" data-volume="1"></audio>
+      <audio id="vo-s3" src="assets/vo/s3.wav" data-start="27.576" data-duration="14.348" data-track-index="10" data-volume="1"></audio>
+      <audio id="vo-s4" src="assets/vo/s4.wav" data-start="42.497" data-duration="21.52" data-track-index="10" data-volume="1"></audio>
+      <audio id="vo-s5" src="assets/vo/s5.wav" data-start="64.589" data-duration="30.183" data-track-index="10" data-volume="1"></audio>
+      <audio id="vo-s6" src="assets/vo/s6.wav" data-start="95.346" data-duration="25.245" data-track-index="10" data-volume="1"></audio>
+      <audio id="vo-s7" src="assets/vo/s7.wav" data-start="121.164" data-duration="16.511" data-track-index="10" data-volume="1"></audio>
+      <audio id="vo-s8" src="assets/vo/s8.wav" data-start="138.248" data-duration="9.952" data-track-index="10" data-volume="1"></audio>
+
+      <audio id="sfx-trigger" src="assets/sfx/impactSoft_heavy_001.ogg" data-start="35.296" data-duration="0.57" data-track-index="11" data-volume="0.5"></audio>
+      <audio id="sfx-grid" src="assets/sfx/bong_001.ogg" data-start="91.139" data-duration="0.12" data-track-index="12" data-volume="0.32"></audio>
+      <audio id="sfx-apply" src="assets/sfx/impactSoft_medium_001.ogg" data-start="120.189" data-duration="0.18" data-track-index="13" data-volume="0.42"></audio>
+    </div>
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      const E = "power3.out";
+
+      // open from graphite
+      tl.fromTo("#fadein", { opacity: 1 }, { opacity: 0, duration: 1.3, ease: "power1.inOut" }, 0.05);
+
+      // crossfades: the outgoing shot dissolves over the incoming one
+      tl.fromTo("#vw-s1", { opacity: 1 }, { opacity: 0, duration: 0.213, ease: "none" }, 12.787);
+      tl.fromTo("#vw-s2", { opacity: 1 }, { opacity: 0, duration: 0.5, ease: "none" }, 27.126);
+      tl.fromTo("#vw-s3", { opacity: 1 }, { opacity: 0, duration: 0.5, ease: "none" }, 42.047);
+      tl.fromTo("#vw-s4", { opacity: 1 }, { opacity: 0, duration: 0.5, ease: "none" }, 64.139);
+      tl.fromTo("#vw-s7", { opacity: 1 }, { opacity: 0, duration: 0.5, ease: "none" }, 138);
+
+      // title
+      tl.fromTo("#title-scrim", { opacity: 0 }, { opacity: 1, duration: 0.7, ease: "power2.out" }, 10.487);
+      tl.fromTo("#title-mark", { scale: 0.6, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.7, ease: "back.out(1.6)" }, 10.537);
+      tl.fromTo("#title-name", { y: 34, opacity: 0 }, { y: 0, opacity: 1, duration: 0.8, ease: E }, 10.667);
+      tl.fromTo("#title-tag", { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, ease: E }, 10.937);
+      tl.to(["#title-scrim", "#title"], { opacity: 0, duration: 0.6, ease: "power2.in" }, 13.087);
+
+      // the shock lands
+      tl.fromTo("#flash", { opacity: 0 }, { opacity: 1, duration: 0.12, ease: "power2.out" }, 35.326);
+      tl.to("#flash", { opacity: 0, duration: 1.1, ease: "power2.in" }, 35.476);
+
+      // chapter kickers
+      tl.fromTo("#chp-s2", { y: -16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: E }, 13.137);
+      tl.to("#chp-s2", { opacity: 0, duration: 0.45, ease: "power2.in" }, 16.187);
+      tl.fromTo("#chp-s3", { y: -16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: E }, 27.476);
+      tl.to("#chp-s3", { opacity: 0, duration: 0.45, ease: "power2.in" }, 30.526);
+      tl.fromTo("#chp-s4", { y: -16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: E }, 42.397);
+      tl.to("#chp-s4", { opacity: 0, duration: 0.45, ease: "power2.in" }, 45.447);
+      tl.fromTo("#chp-s5", { y: -16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: E }, 64.489);
+      tl.to("#chp-s5", { opacity: 0, duration: 0.45, ease: "power2.in" }, 67.539);
+      tl.fromTo("#chp-s6", { y: -16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: E }, 94.489);
+      tl.to("#chp-s6", { opacity: 0, duration: 0.45, ease: "power2.in" }, 97.539);
+      tl.fromTo("#chp-s7", { y: -16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: E }, 120.489);
+      tl.to("#chp-s7", { opacity: 0, duration: 0.45, ease: "power2.in" }, 123.539);
+
+      tl.fromTo("#replayp", { y: -16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: E }, 68.339);
+      tl.to("#replayp", { opacity: 0, duration: 0.4 }, 90.689);
+
+      // subtitles: a quick settle, never a slow fade
+      tl.fromTo("#subb-0", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 1);
+      tl.fromTo("#subb-1", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 6.807);
+      tl.fromTo("#subb-2", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 13.237);
+      tl.fromTo("#subb-3", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 17.209);
+      tl.fromTo("#subb-4", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 22.515);
+      tl.fromTo("#subb-5", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 27.576);
+      tl.fromTo("#subb-6", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 29.172);
+      tl.fromTo("#subb-7", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 33.332);
+      tl.fromTo("#subb-8", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 36.089);
+      tl.fromTo("#subb-9", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 39.864);
+      tl.fromTo("#subb-10", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 42.497);
+      tl.fromTo("#subb-11", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 45.355);
+      tl.fromTo("#subb-12", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 48.373);
+      tl.fromTo("#subb-13", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 50.74);
+      tl.fromTo("#subb-14", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 52.752);
+      tl.fromTo("#subb-15", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 54.866);
+      tl.fromTo("#subb-16", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 57.488);
+      tl.fromTo("#subb-17", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 60.796);
+      tl.fromTo("#subb-18", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 64.589);
+      tl.fromTo("#subb-19", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 66.712);
+      tl.fromTo("#subb-20", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 68.54);
+      tl.fromTo("#subb-21", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 71.489);
+      tl.fromTo("#subb-22", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 77.062);
+      tl.fromTo("#subb-23", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 83.483);
+      tl.fromTo("#subb-24", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 87.265);
+      tl.fromTo("#subb-25", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 92.234);
+      tl.fromTo("#subb-26", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 95.346);
+      tl.fromTo("#subb-27", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 98.016);
+      tl.fromTo("#subb-28", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 100.919);
+      tl.fromTo("#subb-29", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 104.048);
+      tl.fromTo("#subb-30", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 107.346);
+      tl.fromTo("#subb-31", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 109.841);
+      tl.fromTo("#subb-32", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 115.315);
+      tl.fromTo("#subb-33", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 121.164);
+      tl.fromTo("#subb-34", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 125.318);
+      tl.fromTo("#subb-35", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 127.709);
+      tl.fromTo("#subb-36", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 131.567);
+      tl.fromTo("#subb-37", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 135.476);
+      tl.fromTo("#subb-38", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 138.248);
+      tl.fromTo("#subb-39", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 139.423);
+      tl.fromTo("#subb-40", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out" }, 141.235);
+
+      // 04: count the simulations
+      tl.fromTo("#co-sims-card", { x: 60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.6, ease: E }, 87.265);
+      const sims = { n: 0 };
+      tl.to(sims, { n: 328, duration: 1.6, ease: "power2.out", onUpdate: () => { document.getElementById("sims-n").textContent = Math.round(sims.n); } }, 87.465);
+      tl.to("#co-sims-card", { opacity: 0, x: 40, duration: 0.45, ease: "power2.in" }, 93.639);
+
+      // 05: the plan it turned down
+      tl.fromTo("#co-rival-card", { x: 60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.6, ease: E }, 109.841);
+      tl.set("#stamp", { opacity: 0 }, 0);
+      tl.set("#verdict", { opacity: 0 }, 0);
+      tl.set("#futures i", { opacity: 0.25 }, 0);
+      tl.fromTo("#futures i", { opacity: 0.25, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.25, stagger: 0.045, ease: "power2.out" }, 115.315);
+      tl.to("#futures i.ok", { backgroundColor: "#16a34a", duration: 0.2, stagger: 0.03 }, 115.415);
+      tl.to("#futures i.bad", { backgroundColor: "#e5484d", duration: 0.2, stagger: 0.05 }, 115.615);
+      tl.fromTo("#stamp", { scale: 1.6, opacity: 0, rotation: -8 }, { scale: 1, opacity: 1, rotation: -8, duration: 0.35, ease: "back.out(2)" }, 116.915);
+      tl.fromTo("#verdict", { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: E }, 117.215);
+      tl.to("#co-rival-card", { opacity: 0, x: 40, duration: 0.45, ease: "power2.in" }, 119.639);
+
+      // 06: the outcome
+      tl.fromTo("#co-safe-card", { x: 60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.6, ease: E }, 131.567);
+      tl.fromTo("#safe-b", { scale: 0.5, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.5, ease: "back.out(2)" }, 132.267);
+      tl.to("#co-safe-card", { opacity: 0, x: 40, duration: 0.4, ease: "power2.in" }, 137.55);
+
+      // end card
+      tl.fromTo("#end-bg", { opacity: 0 }, { opacity: 0.94, duration: 1.0, ease: "power2.inOut" }, 141.235);
+      tl.fromTo("#end-mark", { scale: 0.6, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.7, ease: "back.out(1.6)" }, 141.535);
+      tl.fromTo("#end-name", { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: E }, 141.685);
+      tl.set("#end-q", { opacity: 0 }, 0);
+      tl.set("#end-url", { opacity: 0 }, 0);
+      tl.fromTo("#end-q", { y: 26, opacity: 0 }, { y: 0, opacity: 1, duration: 0.8, ease: E }, 145.67);
+      tl.fromTo("#end-url", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: E }, 147.87);
+
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

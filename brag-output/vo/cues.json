@@ -1,0 +1,360 @@
+{
+  "s1": {
+    "duration": 10.037,
+    "sentences": 2,
+    "cues": [
+      {
+        "start": 0,
+        "end": 2.633,
+        "text": "A ship stuck outside a port on Monday can"
+      },
+      {
+        "start": 2.633,
+        "end": 5.587,
+        "text": "leave a hospital without insulin by Wednesday."
+      },
+      {
+        "start": 5.807,
+        "end": 8.224,
+        "text": "The chain between those two facts is"
+      },
+      {
+        "start": 8.224,
+        "end": 10.037,
+        "text": "invisible, until it breaks."
+      }
+    ]
+  },
+  "s2": {
+    "duration": 13.765,
+    "sentences": 3,
+    "cues": [
+      {
+        "start": 0,
+        "end": 2.988,
+        "text": "Large distributors run planning suites that"
+      },
+      {
+        "start": 2.988,
+        "end": 3.752,
+        "text": "model this."
+      },
+      {
+        "start": 3.972,
+        "end": 6.797,
+        "text": "Everyone else finds out when a customer calls"
+      },
+      {
+        "start": 6.797,
+        "end": 9.057,
+        "text": "about a delivery that never arrived."
+      },
+      {
+        "start": 9.277,
+        "end": 12.091,
+        "text": "This is a regional medical supply network,"
+      },
+      {
+        "start": 12.091,
+        "end": 13.765,
+        "text": "running an ordinary week."
+      }
+    ]
+  },
+  "s3": {
+    "duration": 14.348,
+    "sentences": 4,
+    "cues": [
+      {
+        "start": 0,
+        "end": 1.377,
+        "text": "So break one link."
+      },
+      {
+        "start": 1.597,
+        "end": 4.568,
+        "text": "Close the port, shut a hub, close a bridge, or"
+      },
+      {
+        "start": 4.568,
+        "end": 5.537,
+        "text": "cut a supplier."
+      },
+      {
+        "start": 5.757,
+        "end": 8.293,
+        "text": "Choose how long it lasts, and watch it hit."
+      },
+      {
+        "start": 8.513,
+        "end": 10.973,
+        "text": "The clock stops, the shock spreads out from"
+      },
+      {
+        "start": 10.973,
+        "end": 13.604,
+        "text": "the terminal, and every route that depended on"
+      },
+      {
+        "start": 13.604,
+        "end": 14.348,
+        "text": "it turns red."
+      }
+    ]
+  },
+  "s4": {
+    "duration": 21.52,
+    "sentences": 8,
+    "cues": [
+      {
+        "start": 0,
+        "end": 2.638,
+        "text": "Then it tells you what doing nothing costs."
+      },
+      {
+        "start": 2.858,
+        "end": 5.657,
+        "text": "Twenty two orders late, out of seventy."
+      },
+      {
+        "start": 5.877,
+        "end": 8.023,
+        "text": "Eleven of them for hospitals."
+      },
+      {
+        "start": 8.243,
+        "end": 10.035,
+        "text": "Five days to recover."
+      },
+      {
+        "start": 10.255,
+        "end": 12.15,
+        "text": "Sixty four thousand dollars."
+      },
+      {
+        "start": 12.37,
+        "end": 14.772,
+        "text": "And it names the casualties in order."
+      },
+      {
+        "start": 14.992,
+        "end": 18.079,
+        "text": "Day two, Central Hub runs out of insulin."
+      },
+      {
+        "start": 18.299,
+        "end": 21.125,
+        "text": "Day three, Saint Clara Hospital gets a late"
+      },
+      {
+        "start": 21.125,
+        "end": 21.52,
+        "text": "order."
+      }
+    ]
+  },
+  "s5": {
+    "duration": 30.183,
+    "sentences": 7,
+    "cues": [
+      {
+        "start": 0,
+        "end": 1.902,
+        "text": "Now the planner goes to work."
+      },
+      {
+        "start": 2.122,
+        "end": 3.731,
+        "text": "This is not a chatbot."
+      },
+      {
+        "start": 3.95,
+        "end": 6.679,
+        "text": "It is a simulation based planning agent."
+      },
+      {
+        "start": 6.899,
+        "end": 9.809,
+        "text": "It takes every combination of four recovery"
+      },
+      {
+        "start": 9.809,
+        "end": 12.719,
+        "text": "levers, and plays each one out across forty"
+      },
+      {
+        "start": 12.719,
+        "end": 15.425,
+        "text": "randomised futures, where demand, travel"
+      },
+      {
+        "start": 15.425,
+        "end": 18.335,
+        "text": "times, and the disruption's real length all"
+      },
+      {
+        "start": 18.335,
+        "end": 18.673,
+        "text": "vary."
+      },
+      {
+        "start": 18.893,
+        "end": 22.084,
+        "text": "Green means every hospital order arrived on"
+      },
+      {
+        "start": 22.084,
+        "end": 22.455,
+        "text": "time."
+      },
+      {
+        "start": 22.675,
+        "end": 25.477,
+        "text": "Three hundred and twenty eight simulations, in"
+      },
+      {
+        "start": 25.477,
+        "end": 27.425,
+        "text": "under a second, in your browser."
+      },
+      {
+        "start": 27.645,
+        "end": 30.183,
+        "text": "Slowed down here, so you can watch it think."
+      }
+    ]
+  },
+  "s6": {
+    "duration": 25.245,
+    "sentences": 7,
+    "cues": [
+      {
+        "start": 0,
+        "end": 2.45,
+        "text": "Then it picks one, and it shows its work."
+      },
+      {
+        "start": 2.67,
+        "end": 5.353,
+        "text": "Twenty two late orders become three."
+      },
+      {
+        "start": 5.573,
+        "end": 8.482,
+        "text": "Eleven late hospital orders become none."
+      },
+      {
+        "start": 8.703,
+        "end": 11.396,
+        "text": "Sixty four thousand dollars becomes twenty"
+      },
+      {
+        "start": 11.396,
+        "end": 11.78,
+        "text": "eight."
+      },
+      {
+        "start": 12,
+        "end": 14.276,
+        "text": "And here is the part that matters."
+      },
+      {
+        "start": 14.496,
+        "end": 16.997,
+        "text": "Another plan had zero late orders in the"
+      },
+      {
+        "start": 16.997,
+        "end": 19.749,
+        "text": "expected week, better than the one it chose."
+      },
+      {
+        "start": 19.969,
+        "end": 23.053,
+        "text": "It rejected it anyway, because in nineteen of"
+      },
+      {
+        "start": 23.053,
+        "end": 25.245,
+        "text": "forty futures, a hospital waits."
+      }
+    ]
+  },
+  "s7": {
+    "duration": 16.511,
+    "sentences": 4,
+    "cues": [
+      {
+        "start": 0,
+        "end": 2.784,
+        "text": "Apply it, and the week replays from the moment"
+      },
+      {
+        "start": 2.784,
+        "end": 3.934,
+        "text": "the disruption hit."
+      },
+      {
+        "start": 4.154,
+        "end": 6.325,
+        "text": "Green is the plan in action."
+      },
+      {
+        "start": 6.545,
+        "end": 9.258,
+        "text": "Rush orders and spare stock, moving to where"
+      },
+      {
+        "start": 9.258,
+        "end": 10.183,
+        "text": "they're needed."
+      },
+      {
+        "start": 10.403,
+        "end": 13.213,
+        "text": "The hubs hold, the hospitals stay on schedule,"
+      },
+      {
+        "start": 13.213,
+        "end": 16.023,
+        "text": "and it keeps score against doing nothing, hour"
+      },
+      {
+        "start": 16.023,
+        "end": 16.511,
+        "text": "by hour."
+      }
+    ]
+  },
+  "s8": {
+    "duration": 9.952,
+    "sentences": 4,
+    "cues": [
+      {
+        "start": 0,
+        "end": 0.955,
+        "text": "No server."
+      },
+      {
+        "start": 1.175,
+        "end": 2.767,
+        "text": "No API keys."
+      },
+      {
+        "start": 2.987,
+        "end": 5.753,
+        "text": "One browser tab, and an answer to the only"
+      },
+      {
+        "start": 5.753,
+        "end": 7.202,
+        "text": "question that matters."
+      },
+      {
+        "start": 7.422,
+        "end": 9.952,
+        "text": "When one link breaks, who runs out first?"
+      }
+    ]
+  }
+}

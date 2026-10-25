@@ -1,0 +1,83 @@
+{
+  "anchors": {
+    "titleIn": 10.487,
+    "trigger": 35.326,
+    "replayFrom": 68.339,
+    "replayTo": 91.139,
+    "gridDone": 91.139,
+    "simsIn": 87.265,
+    "rivalIn": 109.841,
+    "rejectIn": 115.315,
+    "applyAt": 120.189,
+    "saferIn": 131.567,
+    "endIn": 141.235,
+    "questionIn": 145.67
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "cut": 0,
+      "dur": 12.787,
+      "fade": 0.213,
+      "voStart": 1,
+      "vo": 10.037
+    },
+    {
+      "id": "s2",
+      "cut": 12.787,
+      "dur": 14.338,
+      "fade": 0.5,
+      "voStart": 13.237,
+      "vo": 13.765
+    },
+    {
+      "id": "s3",
+      "cut": 27.126,
+      "dur": 14.921,
+      "fade": 0.5,
+      "voStart": 27.576,
+      "vo": 14.348
+    },
+    {
+      "id": "s4",
+      "cut": 42.047,
+      "dur": 22.093,
+      "fade": 0.5,
+      "voStart": 42.497,
+      "vo": 21.52
+    },
+    {
+      "id": "s5",
+      "cut": 64.139,
+      "dur": 30,
+      "fade": 0,
+      "voStart": 64.589,
+      "vo": 30.183
+    },
+    {
+      "id": "s6",
+      "cut": 94.139,
+      "dur": 26,
+      "fade": 0,
+      "voStart": 95.346,
+      "vo": 25.245
+    },
+    {
+      "id": "s7",
+      "cut": 120.139,
+      "dur": 17.861,
+      "fade": 0.5,
+      "voStart": 121.164,
+      "vo": 16.511
+    },
+    {
+      "id": "s8",
+      "cut": 138,
+      "dur": 12,
+      "fade": 0,
+      "voStart": 138.248,
+      "vo": 9.952
+    }
+  ],
+  "subtitles": 41
+}

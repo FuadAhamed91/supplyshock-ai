@@ -1,0 +1,14 @@
+{
+  "voice": "bm_george",
+  "note": "Every number spoken here is read off the captured run in footage/facts.json. The narration never reads the screen; it says what the picture cannot.",
+  "lines": {
+    "s1": "A ship stuck outside a port on Monday can leave a hospital without insulin by Wednesday. The chain between those two facts is invisible, until it breaks.",
+    "s2": "Large distributors run planning suites that model this. Everyone else finds out when a customer calls about a delivery that never arrived. This is a regional medical supply network, running an ordinary week.",
+    "s3": "So break one link. Close the port, shut a hub, close a bridge, or cut a supplier. Choose how long it lasts, and watch it hit. The clock stops, the shock spreads out from the terminal, and every route that depended on it turns red.",
+    "s4": "Then it tells you what doing nothing costs. Twenty two orders late, out of seventy. Eleven of them for hospitals. Five days to recover. Sixty four thousand dollars. And it names the casualties in order. Day two, Central Hub runs out of insulin. Day three, Saint Clara Hospital gets a late order.",
+    "s5": "Now the planner goes to work. This is not a chatbot. It is a simulation based planning agent. It takes every combination of four recovery levers, and plays each one out across forty randomised futures, where demand, travel times, and the disruption's real length all vary. Green means every hospital order arrived on time. Three hundred and twenty eight simulations, in under a second, in your browser. Slowed down here, so you can watch it think.",
+    "s6": "Then it picks one, and it shows its work. Twenty two late orders become three. Eleven late hospital orders become none. Sixty four thousand dollars becomes twenty eight. And here is the part that matters. Another plan had zero late orders in the expected week, better than the one it chose. It rejected it anyway, because in nineteen of forty futures, a hospital waits.",
+    "s7": "Apply it, and the week replays from the moment the disruption hit. Green is the plan in action. Rush orders and spare stock, moving to where they're needed. The hubs hold, the hospitals stay on schedule, and it keeps score against doing nothing, hour by hour.",
+    "s8": "No server. No API keys. One browser tab, and an answer to the only question that matters. When one link breaks, who runs out first?"
+  }
+}
