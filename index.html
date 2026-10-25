@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SupplyShock AI</title>
+    <meta name="description" content="Rehearse supply-chain disruptions on a live 3D model of your network and let an AI planner find the fastest way to recover." />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="map" class="map"></div>
+
+    <header class="topbar card">
+      <div class="brand">
+        <span class="brand__mark" aria-hidden="true"></span>
+        <div>
+          <div class="brand__name">SupplyShock <span>AI</span></div>
+          <div class="brand__tag">Disruption simulator for distributors</div>
+        </div>
+      </div>
+      <div id="status" class="status"></div>
+      <div id="kpis" class="kpis" aria-label="Network right now"></div>
+      <div class="topbar__right">
+        <button id="btn-help" class="icon-btn" title="How it works"></button>
+        <button id="btn-home" class="icon-btn" title="Reset camera"></button>
+        <button id="btn-reset" class="btn btn--ghost btn--sm"></button>
+      </div>
+    </header>
+
+    <aside id="panel" class="panel card" aria-live="polite"></aside>
+
+    <aside id="side" class="side card">
+      <h3 class="eyebrow">Live events</h3>
+      <ol id="feed" class="feed__list"></ol>
+      <div class="legend">
+        <div class="legend__row"><i class="swatch swatch--normal"></i>Shipment</div>
+        <div class="legend__row"><i class="swatch swatch--ai"></i>AI recovery</div>
+        <div class="legend__row"><i class="swatch swatch--warn"></i>At risk</div>
+        <div class="legend__row"><i class="swatch swatch--bad"></i>Disrupted</div>
+      </div>
+    </aside>
+
+    <div id="inspector" class="inspector card" hidden></div>
+
+    <footer class="timeline card">
+      <button id="btn-play" class="play" title="Play / pause (space)"></button>
+      <div class="speed" role="group" aria-label="Playback speed">
+        <button data-speed="1">1×</button><button data-speed="3">3×</button><button data-speed="8">8×</button>
+      </div>
+      <div id="clock" class="clock"></div>
+      <div id="track" class="track" aria-label="Timeline">
+        <div id="track-days" class="track__days"></div>
+        <div id="track-marks" class="track__marks"></div>
+        <div id="track-fill" class="track__fill"></div>
+        <div id="track-thumb" class="track__thumb"></div>
+      </div>
+    </footer>
+
+    <div id="toast" class="toast" hidden></div>
+
+    <div id="loader" class="loader">
+      <div class="loader__inner">
+        <span class="brand__mark brand__mark--lg" aria-hidden="true"></span>
+        <div class="loader__title">SupplyShock <span>AI</span></div>
+        <div class="loader__bar"><i id="loader-fill"></i></div>
+        <div id="loader-text" class="loader__text">Building your network…</div>
+      </div>
+    </div>
+
+    <div id="intro" class="intro" hidden>
+      <div class="intro__card card" role="dialog" aria-labelledby="intro-title">
+        <div class="intro__eyebrow"><span class="brand__mark" aria-hidden="true"></span>SupplyShock AI</div>
+        <h1 id="intro-title">When one link breaks, who runs out first?</h1>
+        <p class="intro__lead">A ship stuck outside the port on Monday can leave a hospital without insulin by Wednesday. Small distributors usually find out when the phone rings — the planning suites that model this are built for giant companies.</p>
+        <ol class="intro__steps">
+          <li><span class="intro__num">1</span><div><b>Break a link</b>Close the port, a hub or a bridge, or cut a supplier.</div></li>
+          <li><span class="intro__num">2</span><div><b>See the ripple</b>Watch which hubs run dry, which patients wait and what it costs.</div></li>
+          <li><span class="intro__num intro__num--ai">3</span><div><b>Recover with AI</b>It tests every recovery move across hundreds of possible futures and picks the best.</div></li>
+        </ol>
+        <div class="intro__actions">
+          <button class="btn btn--ai" id="intro-start"></button>
+          <button class="btn btn--ghost" id="intro-explore">Explore the map first</button>
+        </div>
+        <p class="intro__foot">Demo network: a fictional regional medical-supply distributor. Everything runs in your browser.</p>
+      </div>
+    </div>
+
+    <article id="report" class="report" aria-hidden="true"></article>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
