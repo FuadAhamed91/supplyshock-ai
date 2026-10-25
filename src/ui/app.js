@@ -25,6 +25,7 @@ import { buildReport, summaryText } from './report.js';
 const RATE = 0.5; // simulated hours per real second at 1x
 const STEPS = ['Break it', 'See the ripple', 'Recover', 'Report'];
 const $ = (id) => document.getElementById(id);
+const rangeFill = (v, { min, max }) => `${(((v - min) / (max - min)) * 100).toFixed(1)}%`;
 
 export class App {
   constructor(map) {
@@ -94,6 +95,7 @@ export class App {
   setPlaying(on) {
     this.playing = on;
     $('btn-play').innerHTML = icon(on ? 'Pause' : 'Play', 18, 2.4);
+    $('btn-play').setAttribute('aria-label', on ? 'Pause' : 'Play');
   }
 
   locked() { return this.mode === 'thinking' || this.mode === 'plans'; }
@@ -106,9 +108,9 @@ export class App {
     });
     this.setPlaying(true);
     document.querySelectorAll('.speed button').forEach((b) => {
-      b.classList.toggle('is-on', Number(b.dataset.speed) === this.speed);
       b.addEventListener('click', () => this.setSpeed(Number(b.dataset.speed)));
     });
+    this.setSpeed(this.speed);
     $('btn-help').innerHTML = icon('Info', 16);
     $('btn-help').addEventListener('click', () => this.showIntro(true));
     $('intro-start').innerHTML = `${icon('Zap', 16)} Start a stress test`;
@@ -118,6 +120,7 @@ export class App {
       btn?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.04)' }, { transform: 'scale(1)' }], { duration: 600, iterations: 2 });
     });
     $('intro-explore').addEventListener('click', () => this.showIntro(false));
+    $('intro').addEventListener('click', (e) => { if (e.target === e.currentTarget) this.showIntro(false); });
     $('btn-home').innerHTML = icon('LocateFixed', 16);
     $('btn-home').addEventListener('click', () => this.map.home());
     $('btn-reset').innerHTML = `${icon('RotateCcw', 14)}<span>Reset</span>`;
@@ -127,7 +130,10 @@ export class App {
         e.preventDefault();
         $('btn-play').click();
       }
-      if (e.code === 'Escape') this.select(null);
+      if (e.code === 'Escape') {
+        if (!$('intro').hidden) this.showIntro(false);
+        else this.select(null);
+      }
     });
     $('panel').addEventListener('click', (e) => this.onPanelClick(e));
     $('panel').addEventListener('input', (e) => this.onPanelInput(e));
@@ -177,6 +183,7 @@ export class App {
     if (on) {
       this.wasPlaying = this.playing;
       this.setPlaying(false);
+      $('intro-start').focus({ preventScroll: true });
     } else if (this.wasPlaying !== undefined) {
       this.setPlaying(this.wasPlaying);
     }
@@ -184,7 +191,11 @@ export class App {
 
   setSpeed(s) {
     this.speed = s;
-    document.querySelectorAll('.speed button').forEach((b) => b.classList.toggle('is-on', Number(b.dataset.speed) === s));
+    document.querySelectorAll('.speed button').forEach((b) => {
+      const on = Number(b.dataset.speed) === s;
+      b.classList.toggle('is-on', on);
+      b.setAttribute('aria-pressed', on);
+    });
   }
 
   toast(text, ic = 'Info') {
@@ -306,14 +317,14 @@ export class App {
     const d = this.draft;
     const sc = SCENARIOS[d.type];
     const cards = Object.values(SCENARIOS).map((s) => `
-      <button class="scenario${s.id === d.type ? ' is-on' : ''}" data-act="pick" data-type="${s.id}">
+      <button class="scenario${s.id === d.type ? ' is-on' : ''}" data-act="pick" data-type="${s.id}" aria-pressed="${s.id === d.type}">
         <span class="scenario__icon">${icon(s.icon, 16)}</span>
         <span class="scenario__title">${s.title}</span>
         <span class="scenario__blurb">${s.blurb}</span>
       </button>`).join('');
     const target = sc.targets ? `
       <div class="field"><div class="field__label">Which hub?</div>
-        <div class="seg">${sc.targets.map((h) => `<button data-act="target" data-target="${h}" class="${h === d.target ? 'is-on' : ''}">${SITES[h].short}</button>`).join('')}</div>
+        <div class="seg" role="group" aria-label="Which hub?">${sc.targets.map((h) => `<button data-act="target" data-target="${h}" class="${h === d.target ? 'is-on' : ''}" aria-pressed="${h === d.target}">${SITES[h].short}</button>`).join('')}</div>
       </div>` : '';
     return `${this.stepsHtml(0)}
       <h2>Stress-test your supply chain</h2>
@@ -323,7 +334,7 @@ export class App {
         ${target}
         <div class="field">
           <div class="field__label">How long will it last? <b id="days-val">${d.days} day${d.days > 1 ? 's' : ''}</b></div>
-          <input type="range" min="${sc.days.min}" max="${sc.days.max}" step="1" value="${d.days}" data-input="days" aria-label="Duration in days">
+          <input type="range" min="${sc.days.min}" max="${sc.days.max}" step="1" value="${d.days}" data-input="days" aria-label="Duration in days" style="--fill:${rangeFill(d.days, sc.days)}">
         </div>
       </div>
       <p class="hint">${icon('MousePointerClick', 15)} Tip: click any building on the map to see its stock and orders.</p>
@@ -361,7 +372,7 @@ export class App {
         <div class="stat ${m.critLate ? 'stat--bad' : 'stat--ok'}"><div class="stat__label">For hospitals</div><div class="stat__value">${m.critLate}</div><div class="stat__sub">patients wait</div></div>
         <div class="stat"><div class="stat__label">Back to normal</div><div class="stat__value">${recovered}</div><div class="stat__sub">after it starts</div></div>
       </div>
-      <div class="cost-line">${icon('DollarSign', 13)} Costs about <b>${money(cost)}</b> · ${int(risk.lateP10)}–${int(risk.lateP90)} late orders across 40 possible futures</div>
+      <div class="cost-line">${icon('DollarSign', 13)}<span>Costs about <b>${money(cost)}</b> · ${int(risk.lateP10)}–${int(risk.lateP90)} late orders across 40 possible futures</span></div>
       <div class="section-title">How the shock spreads</div>
       <div class="timeline-list">${chain.slice(0, 5).map((c) => `<div class="tl-item"><time>${fmtTime(c.t)}</time><span><span class="chip chip--${c.tone}">${c.text}</span></span></div>`).join('')}
         ${chain.length <= 1 ? '<div class="tl-item"><time></time><span class="chip">Stock buffers absorb it this time</span></div>' : ''}
@@ -422,7 +433,7 @@ export class App {
     const table = `<table class="compare"><tr><th></th>${cols.map((o) => `<th class="${o === option ? 'col-pick' : ''}">${o === baseline ? 'Do nothing' : o === option ? (isPick ? 'AI pick' : 'Your pick') : 'Runner-up'}</th>`).join('')}</tr>
       ${rows.map(([label, f]) => `<tr><td>${label}</td>${cols.map((o) => cell(o, f(o))).join('')}</tr>`).join('')}</table>`;
     const list = ranked.slice(0, 6).map((o, i) => `
-      <button class="option${o.id === option.id ? ' is-on' : ''}" data-act="choose" data-id="${o.id}">
+      <button class="option${o.id === option.id ? ' is-on' : ''}" data-act="choose" data-id="${o.id}" aria-pressed="${o.id === option.id}">
         <span class="option__radio"></span>
         <span><span class="option__name">${planTitle(o.actions)}</span><br><span class="option__meta">${int(o.expected.late)} late · hospitals safe in ${pct(o.stats.success)} · ${money(extraCost(o.expected, H))}</span></span>
         <span class="option__score">#${i + 1}</span>
@@ -431,7 +442,7 @@ export class App {
     return `${this.stepsHtml(2)}
       <h2>${noAction ? 'No action needed' : 'Your recovery plan'}</h2>
       <p class="lead">Picked from ${this.search.strategies} strategies, each played out across ${this.search.runs} possible futures.</p>
-      <div class="seg" role="group" aria-label="Optimize for">${Object.entries(OBJECTIVES).map(([k, o]) => `<button data-act="objective" data-obj="${k}" class="${k === this.objective ? 'is-on' : ''}" title="${o.hint}">${o.label}</button>`).join('')}</div>
+      <div class="seg" role="group" aria-label="Optimize for">${Object.entries(OBJECTIVES).map(([k, o]) => `<button data-act="objective" data-obj="${k}" class="${k === this.objective ? 'is-on' : ''}" aria-pressed="${k === this.objective}" title="${o.hint}">${o.label}</button>`).join('')}</div>
       <div class="plan" style="margin-top:12px">
         <span class="plan__badge">${icon(isPick ? 'Sparkles' : 'Check', 13)} ${isPick ? 'AI recommended' : 'Your pick'}</span>
         <div class="plan__title">${planTitle(option.actions)}</div>
@@ -500,6 +511,7 @@ export class App {
     if (e.target.dataset.input === 'days') {
       this.draft.days = Number(e.target.value);
       $('days-val').textContent = `${this.draft.days} day${this.draft.days > 1 ? 's' : ''}`;
+      e.target.style.setProperty('--fill', rangeFill(this.draft.days, SCENARIOS[this.draft.type].days));
     }
   }
 
