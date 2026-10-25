@@ -1,0 +1,9 @@
+node_modules
+dist
+.cache
+.claude
+agent
+devpost/learner-profile.md
+blender/__pycache__
+.env
+.env.*

@@ -3,6 +3,8 @@
 **When one link breaks, who runs out first?**
 SupplyShock AI is a disruption simulator for distributors. Break one link of a supply chain on a live 3D model: close the port, shut a hub, close a bridge or cut a supplier. Watch the shock ripple out to hospitals, then let an AI planner rehearse every recovery option across many possible futures and recommend the best one.
 
+**▶ Live demo: [supplyshock-ai.vercel.app](https://supplyshock-ai.vercel.app)** — runs entirely in your browser (desktop Chrome, Edge or Firefox recommended).
+
 ![SupplyShock AI — a regional medical-supply network running normally](docs/overview.png)
 
 ## The problem
@@ -75,6 +77,8 @@ npm test           # engine + planner tests
 npm run build      # static site in dist/
 npm run assets     # rebuild the 3D models (needs Blender on your PATH)
 ```
+
+Deployed on Vercel as a static Vite site (`vercel.json`); `vercel --prod` redeploys.
 
 ## Project structure
 

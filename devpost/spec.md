@@ -35,6 +35,8 @@ Learner choices: Three.js + Blender, white UI. Agent choices: Vite, vanilla JS (
 - `npm install` → `npm run dev` → open http://localhost:5173
 - `npm test` runs the engine tests; `npm run build` makes a static site in `dist/` (any static host works).
 - Rebuild 3D assets: `npm run assets` (needs Blender on PATH).
+- Live deployment (optional, done): https://supplyshock-ai.vercel.app (Vercel, static build from `dist/`; redeploy with `vercel --prod`).
+- Public repository: https://github.com/FuadAhamed91/supplyshock-ai
 - Demo recording: start the dev server, choose "Start a stress test", trigger Port congestion early on Day 1, find plans, apply, download the report.
 
 ## Look and Feel

@@ -12,3 +12,6 @@ dist
 /.claude/
 /agent/
 __pycache__/
+.vercel
+
+.vercel
