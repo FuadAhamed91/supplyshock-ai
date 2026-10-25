@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SupplyShock AI — App Map</title>
+<style>
+  :root { --ink:#0f172a; --ink2:#334155; --ink3:#64748b; --line:#e2e8f0; --brand:#4f46e5; --ok:#16a34a; --bad:#e5484d; --bg:#f6f8fb; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-size: 28px; letter-spacing: -0.02em; margin: 0 0 6px; }
+  h2 { font-size: 18px; margin: 32px 0 10px; }
+  p { margin: 0 0 10px; color: var(--ink2); }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin: 12px 0; }
+  code { font: 13px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; background: #eef2ff; color: #3730a3; padding: 1px 6px; border-radius: 6px; }
+  ol, ul { padding-left: 20px; color: var(--ink2); }
+  li { margin: 6px 0; }
+  .muted { color: var(--ink3); font-size: 13px; }
+  svg { width: 100%; height: auto; display: block; }
+  details { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin: 8px 0; }
+  summary { cursor: pointer; font-weight: 600; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 700; color: var(--brand); background: #eef2ff; border-radius: 999px; padding: 2px 9px; }
+</style>
+</head>
+<body>
+<main>
+  <span class="tag">App map · reference route</span>
+  <h1>SupplyShock AI</h1>
+  <p>A browser app that lets a distributor break one link of its supply chain on a 3D map, see the knock-on effects, and get an AI-recommended recovery plan. Four main pieces: <b>network data</b>, a <b>simulator</b>, an <b>AI planner</b> that runs the simulator many times, and the <b>3D map + panels</b> that show a simulation run.</p>
+
+  <h2>One action, end to end: “Trigger port congestion”</h2>
+  <div class="card">
+    <svg viewBox="0 0 820 170" role="img" aria-label="Click trigger, analyzeImpact simulates, the map and panel show the run">
+      <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/></marker></defs>
+      <g font-size="13" font-family="system-ui, sans-serif">
+        <rect x="10" y="40" width="170" height="80" rx="12" fill="#fdecec" stroke="#e5484d"/>
+        <text x="95" y="72" text-anchor="middle" font-weight="700" fill="#0f172a">Click “Trigger”</text>
+        <text x="95" y="94" text-anchor="middle" fill="#64748b">src/ui/app.js · trigger()</text>
+        <rect x="225" y="40" width="185" height="80" rx="12" fill="#eef2ff" stroke="#4f46e5"/>
+        <text x="317" y="72" text-anchor="middle" font-weight="700" fill="#0f172a">analyzeImpact()</text>
+        <text x="317" y="94" text-anchor="middle" fill="#64748b">src/sim/planner.js</text>
+        <rect x="455" y="40" width="160" height="80" rx="12" fill="#eef2ff" stroke="#4f46e5"/>
+        <text x="535" y="72" text-anchor="middle" font-weight="700" fill="#0f172a">simulate()</text>
+        <text x="535" y="94" text-anchor="middle" fill="#64748b">src/sim/engine.js</text>
+        <rect x="660" y="20" width="150" height="56" rx="12" fill="#e9f8ef" stroke="#16a34a"/>
+        <text x="735" y="45" text-anchor="middle" font-weight="700" fill="#0f172a">3D map</text>
+        <text x="735" y="64" text-anchor="middle" fill="#64748b">MapView.setRun()</text>
+        <rect x="660" y="96" width="150" height="56" rx="12" fill="#e9f8ef" stroke="#16a34a"/>
+        <text x="735" y="121" text-anchor="middle" font-weight="700" fill="#0f172a">Impact panel</text>
+        <text x="735" y="140" text-anchor="middle" fill="#64748b">panelImpact()</text>
+        <line x1="180" y1="80" x2="222" y2="80" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+        <line x1="410" y1="80" x2="452" y2="80" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+        <line x1="615" y1="70" x2="657" y2="50" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+        <line x1="615" y1="90" x2="657" y2="120" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+      </g>
+    </svg>
+    <p class="muted">The same <code>simulate()</code> run drives what you see on the map and the numbers in the panel, so they always agree.</p>
+  </div>
+
+  <h2>Reference route (3 stops)</h2>
+  <ol>
+    <li><code>src/ui/app.js</code> → search <code>trigger()</code>. Builds the scenario from the selected card, calls <code>analyzeImpact</code>, pauses the clock and starts the ripple animation.</li>
+    <li><code>src/sim/engine.js</code> → search <code>case 'HELD'</code> and <code>portDispatch</code>. Where the ship gets held at anchor and how the port restocks hubs; follow <code>hubDispatch</code> to see orders turn late.</li>
+    <li><code>src/sim/planner.js</code> → search <code>searchPlansAsync</code> and <code>GUARDRAIL</code>. Every lever combination × 40 futures, then ranking with late hospital orders weighted highest.</li>
+  </ol>
+  <p class="muted">This route is a reference; it was not toured live.</p>
+
+  <h2>To change this, start here</h2>
+  <details><summary>Use a different business (sites, products, demand)</summary><p>Edit <code>src/data/network.js</code> — <code>SITES</code>, <code>SKUS</code>, <code>ROADS</code>. Positions are map coordinates; run <code>npm test</code> afterwards.</p></details>
+  <details><summary>Add or tune a disruption</summary><p><code>SCENARIOS</code> in <code>src/data/network.js</code> for the card; its effect lives in <code>simulate()</code> (search <code>sc.type ===</code>) in <code>src/sim/engine.js</code>.</p></details>
+  <details><summary>Change how the AI ranks plans</summary><p><code>OBJECTIVES</code> and <code>GUARDRAIL</code> in <code>src/sim/planner.js</code>.</p></details>
+  <details><summary>Change a 3D model</summary><p>Edit the <code>build_*</code> function in <code>blender/build_assets.py</code>, then <code>npm run assets</code> (Blender on PATH) to regenerate <code>public/models/supplyshock.glb</code>.</p></details>
+
+  <h2>A practice to reuse</h2>
+  <div class="card">
+    <p><b>Calibrate with a script before you polish the UI.</b> <code>scripts/sweep.mjs</code> showed that a 3-day port closure only mattered if it caught an incoming ship, so the demo depended on luck; the fix (leaner hub stock, 4-day default) is recorded in <code>devpost/checklist.md › Revisions</code> and guarded by <code>tests/engine.test.mjs</code>. On any project with a model or rules engine, a tiny script that prints outcomes across inputs finds these problems faster than clicking through the UI.</p>
+  </div>
+
+  <h2>Run it again</h2>
+  <p><code>npm install</code> → <code>npm run dev</code> → open <code>http://localhost:5173</code>. Tests: <code>npm test</code>.</p>
+  <p class="muted">Snapshot of the code at the first public commit; paths can drift as the project changes.</p>
+</main>
+</body>
+</html>
