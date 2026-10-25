@@ -5,6 +5,7 @@ import { JUNCTIONS } from '../data/network.js';
 import { cloneAsset, findMaterial } from './assets.js';
 import { smoothPolyline, offsetPolyline, PathSampler, catmull } from './geometry.js';
 import { icon } from '../ui/icons.js';
+import { mulberry32 } from '../sim/rng.js';
 
 export const TRUCK_COLORS = { normal: '#4F46E5', ai: '#16A34A' };
 const isJunction = new Set(Object.values(JUNCTIONS).map(([x, z]) => `${x},${z}`));
@@ -136,6 +137,76 @@ const CLIP = [
   new THREE.Plane(new THREE.Vector3(0, 0, -1), 55.6),
 ];
 
+// Wake: a fading V of foam behind the stern, as an alpha map (u: tail 0 -> stern 1, v: across).
+let wakeShape = null;
+function wakeTexture() {
+  const w = 256;
+  const h = 128;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(w, h);
+  const rng = mulberry32(5);
+  const g = (d, s) => Math.exp(-(d * d) / (2 * s * s));
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const a = 1 - x / (w - 1); // 0 at the stern, 1 at the tail
+      const across = Math.abs(y / (h - 1) - 0.5);
+      const arms = g(across - (0.07 + a * 0.36), 0.026 + a * 0.04);
+      const wash = g(across, 0.05 + a * 0.1) * Math.exp(-a * 2.5);
+      const fade = (1 - a) ** 1.2 * Math.min(1, a * 25);
+      const v = Math.min(1, (arms + wash) * fade * (0.8 + rng() * 0.2)) * 255;
+      const i = (y * w + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 8; // stays crisp at the camera's low angle
+  return tex;
+}
+
+function makeWake(scene, ship) {
+  if (!wakeShape) {
+    // the hull in the ship's own frame (+x is forward)
+    const box = new THREE.Box3().setFromObject(cloneAsset('ship'));
+    const len = box.max.x - box.min.x;
+    const geometry = new THREE.PlaneGeometry(len * 1.8, len * 0.85).rotateX(-Math.PI / 2).translate(-len * 0.9, 0, 0);
+    wakeShape = { geometry, texture: wakeTexture(), sternX: box.min.x + len * 0.04, midZ: (box.min.z + box.max.z) / 2 };
+  }
+  const mesh = new THREE.Mesh(wakeShape.geometry, new THREE.MeshBasicMaterial({
+    color: '#FFFFFF', alphaMap: wakeShape.texture, transparent: true, opacity: 0, depthWrite: false, clippingPlanes: CLIP,
+  }));
+  mesh.visible = false;
+  scene.add(mesh);
+  ship.wake = { mesh, strength: 0 };
+  ship.speed = 0;
+}
+
+const _stern = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
+/**
+ * Follow the ship's stern. The wake grows with `ship.speed` (board units per
+ * simulated hour), so it holds while the clock is paused.
+ */
+function trailWake(ship) {
+  const w = ship.wake;
+  const o = ship.obj;
+  const target = o.visible ? THREE.MathUtils.smoothstep(ship.speed, 0.5, 6) : 0;
+  w.strength += (target - w.strength) * 0.08;
+  const m = w.mesh;
+  m.visible = o.visible && w.strength > 0.02;
+  if (!m.visible) return;
+  const s = o.scale.x;
+  _stern.set(wakeShape.sternX * s, 0, wakeShape.midZ * s).applyAxisAngle(_up, o.rotation.y);
+  m.position.set(o.position.x + _stern.x, SEA_LEVEL + 0.03, o.position.z + _stern.z);
+  m.rotation.y = o.rotation.y;
+  m.scale.set(s * (0.45 + 0.55 * w.strength), 1, s);
+  m.material.opacity = 0.9 * w.strength;
+}
+
 /** A container ship whose materials are clipped at the board edge (it sails in "through" it). */
 function makeShip(scene, { hull = null, scale = 1 } = {}) {
   const obj = cloneAsset('ship');
@@ -153,7 +224,9 @@ function makeShip(scene, { hull = null, scale = 1 } = {}) {
   obj.visible = false;
   scene.add(obj);
   const bays = ['a', 'b', 'c', 'd', 'e'].map((k) => obj.getObjectByName(`ship_cargo_${k}`)).filter(Boolean);
-  return { obj, bays, shown: 0 };
+  const ship = { obj, bays, shown: 0 };
+  makeWake(scene, ship);
+  return ship;
 }
 
 /** Background shipping: a ship passing in the lane, one at anchor, and a queue when the port is congested. */
@@ -177,6 +250,7 @@ export class AmbientShips {
     p.visible = true;
     p.position.set(-77.4, SEA_LEVEL, -80 + 160 * f);
     p.rotation.y = -Math.PI / 2;
+    this.passer.speed = 160 / 30;
     bob(p, 1);
     const a = this.anchored.obj;
     a.visible = true;
@@ -185,6 +259,7 @@ export class AmbientShips {
     bob(a, 2);
     this.queue.forEach((q, i) => {
       q.ship.shown += ((congested ? 1 : 0) - q.ship.shown) * 0.04;
+      q.ship.speed = congested ? (1 - q.ship.shown) * 30 : 0; // steaming in to join the queue
       const o = q.ship.obj;
       o.visible = q.ship.shown > 0.02;
       if (!o.visible) return;
@@ -193,6 +268,7 @@ export class AmbientShips {
       o.scale.setScalar(0.7 * Math.min(1, q.ship.shown * 1.2));
       bob(o, 3 + i);
     });
+    for (const ship of [this.passer, this.anchored, ...this.queue.map((q) => q.ship)]) trailWake(ship);
   }
 }
 
@@ -216,8 +292,9 @@ export class ShipLayer {
 
   setRun(run) { this.run = run; }
 
-  place(ship, sampler, s, time) {
+  place(ship, sampler, s, time, speed) {
     sampler.at(s, this.p);
+    ship.speed = speed;
     ship.obj.visible = true;
     ship.obj.position.set(this.p.x, SEA_LEVEL + Math.sin(time * 0.9) * 0.05, this.p.z);
     ship.obj.rotation.set(0, this.p.angle, Math.sin(time * 1.3) * 0.012);
@@ -239,18 +316,18 @@ export class ShipLayer {
       if (v.held && t < v.arrive - 2) {
         // sail to the anchorage, then wait
         const f = Math.min(1, (t - startIn) / approach);
-        this.place(ship, this.inPath, this.anchorS * ease(f), time);
+        this.place(ship, this.inPath, this.anchorS * ease(f), time, (this.anchorS * 2 * (1 - f)) / approach);
         if (f >= 1) heldPos = [this.p.x, this.p.z];
       } else if (t < v.arrive) {
         const from = v.held ? this.anchorS : 0;
         const dur = v.held ? 2 : approach;
         const f = Math.min(1, Math.max(0, (t - (v.arrive - dur)) / dur));
-        this.place(ship, this.inPath, from + (L - from) * ease(f), time);
+        this.place(ship, this.inPath, from + (L - from) * ease(f), time, ((L - from) * 2 * (1 - f)) / dur);
       } else if (t < v.unloadEnd) {
-        this.place(ship, this.inPath, L, time);
+        this.place(ship, this.inPath, L, time, 0);
       } else {
         const f = Math.min(1, (t - v.unloadEnd) / 6);
-        this.place(ship, this.outPath, this.outPath.length * f * f, time);
+        this.place(ship, this.outPath, this.outPath.length * f * f, time, (this.outPath.length * 2 * f) / 6);
       }
       // cargo bays empty out while unloading
       const loaded = Math.ceil(ship.bays.length * v.share - 1e-6);
@@ -259,6 +336,7 @@ export class ShipLayer {
       ship.bays.forEach((b, i) => { b.visible = i >= ship.bays.length - visible; });
     }
     for (let i = used; i < this.ships.length; i++) this.ships[i].obj.visible = false;
+    for (const ship of this.ships) trailWake(ship);
     this.effects.setAnchorAlarm(heldPos);
   }
 }

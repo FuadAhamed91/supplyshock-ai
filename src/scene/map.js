@@ -256,7 +256,7 @@ export class MapView {
     }
     animateSites(this.sites, dt, this.time, this.ui);
     this.effects.update(dt);
-    this.terrain.waterNormal.offset.set(this.time * 0.006, this.time * 0.004);
+    this.terrain.water.update(this.time);
     this.world.tick(dt);
   }
 }

@@ -8,6 +8,7 @@ import {
 } from './geometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { cloneAsset, meshParts } from './assets.js';
+import { createWater } from './water.js';
 
 export const BOARD = { x0: -80, x1: 80, z0: -56, z1: 56, r: 9 };
 export const ROAD_W = 3.2;
@@ -57,34 +58,53 @@ function toGround(geometry) {
   return geometry;
 }
 
-// Tileable ripple normal map so the water shimmers when it scrolls.
-function waterNormalTexture() {
-  const size = 128;
-  const c = document.createElement('canvas');
-  c.width = c.height = size;
-  const ctx = c.getContext('2d');
-  const img = ctx.createImageData(size, size);
-  const h = (x, y) => {
-    const u = (x / size) * Math.PI * 2;
-    const v = (y / size) * Math.PI * 2;
-    return Math.sin(u * 3 + Math.sin(v * 2)) * 0.5 + Math.sin(v * 4 + u) * 0.35 + Math.sin((u + v) * 5) * 0.15;
-  };
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const dx = h(x + 1, y) - h(x - 1, y);
-      const dy = h(x, y + 1) - h(x, y - 1);
-      const n = new THREE.Vector3(-dx * 1.2, -dy * 1.2, 1).normalize();
-      const i = (y * size + x) * 4;
-      img.data[i] = (n.x * 0.5 + 0.5) * 255;
-      img.data[i + 1] = (n.y * 0.5 + 0.5) * 255;
-      img.data[i + 2] = (n.z * 0.5 + 0.5) * 255;
-      img.data[i + 3] = 255;
+/**
+ * The sea's cut face: a wall along the board edge wherever the sea reaches it,
+ * so the water reads as a body of water in the model rather than a film.
+ */
+function seaWallGeometry() {
+  const { x0, z0, z1, r } = BOARD;
+  const pts = []; // [x, z, outward x, outward z]
+  // the same quadratic corners as roundedRect(), walked anticlockwise from above
+  const corner = (p0, c, p2) => {
+    for (let k = 0; k <= 10; k++) {
+      const u = k / 10;
+      const x = (1 - u) ** 2 * p0[0] + 2 * u * (1 - u) * c[0] + u * u * p2[0];
+      const z = (1 - u) ** 2 * p0[1] + 2 * u * (1 - u) * c[1] + u * u * p2[1];
+      const tx = (1 - u) * (c[0] - p0[0]) + u * (p2[0] - c[0]);
+      const tz = (1 - u) * (c[1] - p0[1]) + u * (p2[1] - c[1]);
+      const l = Math.hypot(tx, tz);
+      pts.push([x, z, -tz / l, tx / l]);
     }
-  }
-  ctx.putImageData(img, 0, 0);
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  return tex;
+  };
+  pts.push([coastX(z0), z0, 0, -1]);
+  corner([x0 + r, z0], [x0, z0], [x0, z0 + r]); // back-left, then down the left edge
+  corner([x0, z1 - r], [x0, z1], [x0 + r, z1]); // front-left
+  pts.push([coastX(z1), z1, 0, 1]);
+  const top = -0.56;
+  const bottom = -3.9;
+  const pos = [];
+  const col = [];
+  const idx = [];
+  const cTop = new THREE.Color('#9CCBEA');
+  const cBottom = new THREE.Color('#6E9FCF');
+  pts.forEach(([x, z, nx, nz], i) => {
+    // just proud of the base slab so the two faces don't fight
+    const ox = x + nx * 0.04;
+    const oz = z + nz * 0.04;
+    pos.push(ox, top, oz, ox, bottom, oz);
+    col.push(cTop.r, cTop.g, cTop.b, cBottom.r, cBottom.g, cBottom.b);
+    if (i > 0) {
+      const k = i * 2;
+      idx.push(k - 2, k - 1, k, k - 1, k + 1, k); // facing outwards
+    }
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
 }
 
 function roadTexture() {
@@ -121,16 +141,12 @@ export function buildTerrain(scene) {
   group.add(base);
 
   // Sea
-  const waterNormal = waterNormalTexture();
-  waterNormal.repeat.set(0.05, 0.05);
-  const waterMat = new THREE.MeshStandardMaterial({
-    color: COLORS.water, roughness: 0.18, metalness: 0.0, normalMap: waterNormal,
-    normalScale: new THREE.Vector2(0.35, 0.35),
-  });
-  const sea = new THREE.Mesh(toGround(new THREE.ShapeGeometry(roundedRect(x0, z0, x1, z1, r))), waterMat);
+  const water = createWater();
+  const sea = new THREE.Mesh(toGround(new THREE.ShapeGeometry(roundedRect(x0, z0, x1, z1, r), 16)), water.sea);
   sea.position.y = -0.55;
   sea.receiveShadow = true;
   group.add(sea);
+  group.add(new THREE.Mesh(seaWallGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4 })));
 
   // Land
   const land = new THREE.Mesh(
@@ -151,9 +167,7 @@ export function buildTerrain(scene) {
   const bank = new THREE.Mesh(ribbonGeometry(river, 8.4, 0.012), new THREE.MeshStandardMaterial({ color: COLORS.bank, roughness: 1 }));
   bank.receiveShadow = true;
   group.add(bank);
-  const riverWaterMat = waterMat.clone();
-  riverWaterMat.normalMap = waterNormal;
-  const riverMesh = new THREE.Mesh(ribbonGeometry(river, 5.2, 0.024), riverWaterMat);
+  const riverMesh = new THREE.Mesh(ribbonGeometry(river, 5.2, 0.024), water.river);
   riverMesh.receiveShadow = true;
   group.add(riverMesh);
 
@@ -223,7 +237,7 @@ export function buildTerrain(scene) {
   group.add(rails);
 
   scatterScenery(group, roadPaths, river);
-  return { group, roadPaths, bridges, waterNormal, river };
+  return { group, roadPaths, bridges, water, river };
 }
 
 // Trees and a few homes so the network sits in a living landscape.
