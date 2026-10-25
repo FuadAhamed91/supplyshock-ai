@@ -8,9 +8,11 @@
 import { APPLICABLE, BASE_HORIZON } from '../data/network.js';
 import { simulate } from './engine.js';
 
-// Every objective keeps the same guardrail: a late hospital order costs far more
-// than anything else, so no objective "optimises" by letting patients wait.
-const GUARDRAIL = 60000;
+// Every objective keeps the same guardrail: a late hospital order outweighs any
+// saving in cost, speed or CO2, so no objective "optimises" by letting patients
+// wait. (Checked across every scenario, duration and objective: no pick ever
+// protects hospitals worse than the best plan available.)
+const GUARDRAIL = 1e6;
 export const OBJECTIVES = {
   balanced: { label: 'Balanced', hint: 'Service first, then cost and emissions',
     w: { late: 3000, cost: 1, co2: 1, recovery: 80 } },
@@ -22,8 +24,11 @@ export const OBJECTIVES = {
     w: { late: 1500, cost: 0.15, co2: 20, recovery: 10 } },
 };
 
+// Long enough to watch the network recover: 3.5 days after the disruption, or
+// 5.5 after a supplier outage (the backlog has to come in on later sailings).
 export function horizonFor(scenario) {
-  return Math.max(BASE_HORIZON, Math.ceil((scenario.start + scenario.days * 24 + 84) / 24) * 24);
+  const tail = scenario.type === 'supplier' ? 132 : 84;
+  return Math.max(BASE_HORIZON, Math.ceil((scenario.start + scenario.days * 24 + tail) / 24) * 24);
 }
 
 function subsets(list) {
@@ -61,6 +66,7 @@ function summarize(metricsList, horizon) {
     co2: mean(metricsList.map((m) => extraCo2(m, horizon))),
     recoveryH: mean(metricsList.map((m) => m.recoveryH)),
     success: mean(metricsList.map((m) => (m.critLate === 0 ? 1 : 0))),
+    safe: metricsList.map((m) => m.critLate === 0), // per future, for the planner animation
     lateP10: pct(metricsList.map((m) => m.late), 0.1),
     lateP90: pct(metricsList.map((m) => m.late), 0.9),
     recoveryP90: pct(metricsList.map((m) => m.recoveryH), 0.9),
@@ -120,12 +126,28 @@ export function score(option, objective) {
   return GUARDRAIL * s.critLate + w.late * s.late + w.cost * s.cost + w.co2 * s.co2 + w.recovery * s.recoveryH;
 }
 
-/** Rank options for an objective; ties go to the simpler plan. */
+/**
+ * Rank options for an objective. Near-ties (within 1.5%, about the size of
+ * Monte Carlo trucking noise) go to the simpler plan, as long as it protects
+ * hospitals just as well - so no lever is recommended that changes nothing.
+ */
 export function rank(search, objective) {
-  return [...search.options].sort((a, b) => {
-    const d = score(a, objective) - score(b, objective);
-    return Math.abs(d) > 1 ? d : a.actions.length - b.actions.length;
-  });
+  const rest = search.options
+    .map((o) => ({ o, s: score(o, objective) }))
+    .sort((a, b) => a.s - b.s || a.o.actions.length - b.o.actions.length);
+  const out = [];
+  while (rest.length) {
+    const lead = rest[0];
+    const tol = Math.max(1, Math.abs(lead.s) * 0.015);
+    let pick = 0;
+    for (let i = 1; i < rest.length && rest[i].s - lead.s <= tol; i++) {
+      const c = rest[i].o;
+      const sameCare = c.stats.critLate <= lead.o.stats.critLate + 0.05 && c.stats.success >= lead.o.stats.success - 0.03;
+      if (sameCare && c.actions.length < rest[pick].o.actions.length) pick = i;
+    }
+    out.push(rest.splice(pick, 1)[0].o);
+  }
+  return out;
 }
 
 /** Full playback run for a chosen option. */

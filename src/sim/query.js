@@ -1,6 +1,8 @@
 // Read-only views of a simulation run at a moment in time (for the map and panels).
 import { SITES, HUB_IDS, CUSTOMER_IDS, SKU_IDS, SKUS, VESSEL } from '../data/network.js';
 
+export const LOW_COVER = 0.5; // days of stock below which a hub counts as at risk
+
 export const dailyDemand = (hub, sku) => CUSTOMER_IDS.reduce(
   (a, c) => a + (SITES[c].hub === hub ? SITES[c].demand[sku] : 0), 0,
 );
@@ -30,10 +32,12 @@ export function hubState(run, hub, t) {
     if (d && s < 1) out = true;
   }
   const closed = sc && sc.type === 'hub' && sc.target === hub && t >= sc.start && t < sc.end;
+  // Hubs dip to ~0.6 days right after a normal dispatch run, so "at risk" starts
+  // below half a day: a calm week never shows false alarms.
   let tone = 'ok';
   if (closed) tone = 'disrupted';
   else if (out) tone = 'bad';
-  else if (minCover < 1) tone = 'warn';
+  else if (minCover < LOW_COVER) tone = 'warn';
   const outSku = SKUS.find((s) => cover[s.id] * dailyDemand(hub, s.id) < 1);
   const meta = closed ? 'Offline · power outage'
     : out ? `Out of ${outSku ? outSku.name.toLowerCase() : 'stock'}`
@@ -139,9 +143,10 @@ export function overdueSeries(run) {
 }
 
 export function fmtTime(t, withDay = true) {
-  const day = Math.floor(t / 24) + 1;
-  const h = Math.floor(t % 24);
-  const m = Math.floor(((t % 24) - h) * 60);
+  const mins = Math.floor(t * 60 + 1e-6); // the epsilon keeps 14.2 h at 14:12, not 14:11
+  const day = Math.floor(mins / 1440) + 1;
+  const h = Math.floor((mins % 1440) / 60);
+  const m = mins % 60;
   const hm = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   return withDay ? `Day ${day} · ${hm}` : hm;
 }

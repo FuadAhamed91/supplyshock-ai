@@ -3,7 +3,9 @@
 // flows) is derived from that run at that moment.
 import * as THREE from 'three';
 import { SITES, JUNCTIONS, ROADS, HUB_IDS, CUSTOMER_IDS } from '../data/network.js';
-import { backupState, hubState, customerState } from '../sim/query.js';
+import {
+  backupState, hubState, customerState, LOW_COVER,
+} from '../sim/query.js';
 import { route } from '../sim/graph.js';
 import { createWorld } from './world.js';
 import { loadAssets } from './assets.js';
@@ -21,6 +23,7 @@ export class MapView {
     this.time = 0;
     this.lastQ = null;
     this.handlers = { select: () => {}, hover: () => {} };
+    this.timers = [];
   }
 
   async init(container, onProgress) {
@@ -122,13 +125,20 @@ export class MapView {
       this.effects.ripple(s.pos[0], s.pos[1], color === '#E5484D' ? '#F59E0B' : color, RING_R[s.type] * 1.4, 1.2, delay);
       const label = this.sites.sites[a]?.label;
       if (label) {
-        setTimeout(() => {
+        this.timers.push(setTimeout(() => {
           label.classList.remove('is-flash');
           void label.offsetWidth;
           label.classList.add('is-flash');
-        }, delay * 1000);
+        }, delay * 1000));
       }
     });
+  }
+
+  /** Stop shockwaves and label flashes still in flight (e.g. after Reset). */
+  clearEffects() {
+    this.timers.forEach(clearTimeout);
+    this.timers = [];
+    this.effects.clearRipples();
   }
 
   roadDirection(points, roadId) {
@@ -200,7 +210,7 @@ export class MapView {
       if (r.kind === 'supply') {
         const viaBridge = r.roads.some((x) => x.id === 'harborRd');
         if (portDown || hubs[r.to].closed || (bridgeDown && viaBridge)) status = 'bad';
-        else if (hubs[r.to].minCover < 1) status = 'warn';
+        else if (hubs[r.to].minCover < LOW_COVER) status = 'warn';
       } else {
         if (reassigned.has(r.to)) continue;
         const c = customerState(run, r.to, t);

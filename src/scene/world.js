@@ -70,14 +70,19 @@ export function createWorld(container) {
     renderer.setSize(w, h);
     labels.setSize(w, h);
     camera.aspect = w / h;
-    // Keep the whole board in view on narrow screens.
-    camera.fov = w / h < 1.2 ? 44 : 30;
-    // Shift the optical centre into the free space right of the side panel.
+    // Keep most of the board's width in view on narrow and portrait screens.
+    const fit = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(17)) / camera.aspect));
+    camera.fov = THREE.MathUtils.clamp(fit, 30, 68);
+    // Shift the optical centre into the free map area: right of the side panel on
+    // wide screens, above the bottom sheet on phones (sizes as in styles.css).
     const panel = document.getElementById('panel');
-    const right = panel && w > 760 ? panel.getBoundingClientRect().right : 0;
-    const shift = right / 2;
-    if (shift > 0) camera.setViewOffset(w, h, -shift, 0, w, h);
-    else camera.clearViewOffset();
+    if (w > 760) {
+      const right = panel ? panel.getBoundingClientRect().right : 0;
+      camera.setViewOffset(w, h, -right / 2, 0, w, h);
+    } else {
+      const sheet = h * 0.48 + 98;
+      camera.setViewOffset(w, h, 0, (sheet - 64) / 2, w, h);
+    }
     camera.updateProjectionMatrix();
   }
   window.addEventListener('resize', resize);
@@ -99,7 +104,12 @@ export function createWorld(container) {
       toTarget: HOME.target.clone(), toPos: HOME.pos.clone(),
     };
   }
-  controls.addEventListener('start', () => { flight = null; });
+  let userMovedAt = -Infinity;
+  controls.addEventListener('start', () => {
+    flight = null;
+    userMovedAt = performance.now();
+  });
+  const userMovedSince = (t) => userMovedAt >= t;
 
   // Dynamic resolution: if frames stay slow for several seconds, render fewer
   // pixels instead of stuttering. Short stalls (e.g. while the planner runs) don't count.
@@ -139,5 +149,7 @@ export function createWorld(container) {
     labels.render(scene, camera);
   }
 
-  return { renderer, scene, camera, controls, labels, sun, tick, flyTo, home, resize };
+  return {
+    renderer, scene, camera, controls, labels, sun, tick, flyTo, home, resize, userMovedSince,
+  };
 }

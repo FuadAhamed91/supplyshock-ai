@@ -1,7 +1,7 @@
 // App controller: owns the clock and the guided flow
-//   1 Break it -> 2 See the ripple -> 3 Recover (AI planner) -> 4 Recovery & report
+//   1 Break a link -> 2 See the ripple -> 3 Recover with AI (planner) -> 4 Watch & share
 import {
-  SITES, SKUS, SKU_IDS, SCENARIOS, HUB_IDS, START_TIME, BASE_HORIZON, BACKUP, CUSTOMER_IDS,
+  SITES, SKUS, SKU_IDS, SCENARIOS, HUB_IDS, START_TIME, BASE_HORIZON, BACKUP, CUSTOMER_IDS, APPLICABLE,
 } from '../data/network.js';
 import { simulate } from '../sim/engine.js';
 import {
@@ -12,18 +12,19 @@ import {
   stockAt, dailyDemand,
 } from '../sim/query.js';
 import {
-  planTitle, scenarioSentence, rippleChain, actionDetails, planReason,
+  planTitle, scenarioSentence, rippleChain, actionDetails, planReason, recoveryText,
 } from '../sim/explain.js';
 import { beaconFor } from '../scene/map.js';
 import { icon, SITE_ICON } from './icons.js';
 import { lineChart } from './charts.js';
 import {
-  money, int, pct, days, co2, oneDecimal,
+  money, int, pct, days, co2, oneDecimal, plural,
 } from './format.js';
 import { buildReport, summaryText } from './report.js';
 
 const RATE = 0.5; // simulated hours per real second at 1x
-const STEPS = ['Break it', 'See the ripple', 'Recover', 'Report'];
+const PLAN_RUNS = 40; // Monte Carlo futures per strategy
+const STEPS = ['Break a link', 'See the ripple', 'Recover with AI', 'Watch & share'];
 const $ = (id) => document.getElementById(id);
 const rangeFill = (v, { min, max }) => `${(((v - min) / (max - min)) * 100).toFixed(1)}%`;
 
@@ -39,6 +40,21 @@ export class App {
     this.selected = null;
     this.uiTick = -1;
     this.feedKey = null;
+    this.flow = 0; // bumped on trigger/reset so late async work can tell it is stale
+    this.timers = [];
+  }
+
+  later(fn, ms) {
+    this.timers.push(setTimeout(fn, ms));
+  }
+
+  cancelPending() {
+    this.flow++;
+    this.timers.forEach(clearTimeout);
+    this.timers = [];
+    this.worker?.terminate();
+    this.worker = null;
+    this.map.clearEffects();
   }
 
   async boot() {
@@ -96,16 +112,29 @@ export class App {
     this.playing = on;
     $('btn-play').innerHTML = icon(on ? 'Pause' : 'Play', 18, 2.4);
     $('btn-play').setAttribute('aria-label', on ? 'Pause' : 'Play');
+    const watch = document.querySelector('[data-act="watch"]');
+    if (watch) watch.innerHTML = this.watchLabel();
+  }
+
+  watchLabel() {
+    return `${icon(this.playing ? 'Pause' : 'Play', 15)} ${this.playing ? 'Pause' : 'Watch it unfold with no plan'}`;
+  }
+
+  /** Play/pause; at the end of a disruption run, play starts the replay over. */
+  togglePlay() {
+    if (this.locked()) return this.toast('Pick a recovery plan first — the clock is paused while you decide', 'Info');
+    if (!this.playing && this.mode !== 'normal' && this.t >= this.run.horizon - 0.01) {
+      this.t = this.mode === 'recovering' ? this.planAt : this.scenario.start;
+      this.uiTick = -1;
+    }
+    return this.setPlaying(!this.playing);
   }
 
   locked() { return this.mode === 'thinking' || this.mode === 'plans'; }
 
   // ---------------------------------------------------------------- chrome
   bindChrome() {
-    $('btn-play').addEventListener('click', () => {
-      if (this.locked()) return this.toast('Pick a recovery plan first — the clock is paused while you decide', 'Info');
-      this.setPlaying(!this.playing);
-    });
+    $('btn-play').addEventListener('click', () => this.togglePlay());
     this.setPlaying(true);
     document.querySelectorAll('.speed button').forEach((b) => {
       b.addEventListener('click', () => this.setSpeed(Number(b.dataset.speed)));
@@ -115,7 +144,11 @@ export class App {
     $('btn-help').addEventListener('click', () => this.showIntro(true));
     $('intro-start').innerHTML = `${icon('Zap', 16)} Start a stress test`;
     $('intro-start').addEventListener('click', () => {
+      // Hold the clock while the test is set up, so the disruption hits before the
+      // first ship berths (Day 1 09:00) instead of depending on reading speed.
+      this.wasPlaying = false;
       this.showIntro(false);
+      this.toast('Clock paused — pick a disruption, then trigger it', 'Info');
       const btn = document.querySelector('[data-act="trigger"]');
       btn?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.04)' }, { transform: 'scale(1)' }], { duration: 600, iterations: 2 });
     });
@@ -125,27 +158,24 @@ export class App {
     $('btn-home').addEventListener('click', () => this.map.home());
     $('btn-reset').innerHTML = `${icon('RotateCcw', 14)}<span>Reset</span>`;
     $('btn-reset').addEventListener('click', () => this.reset());
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' && !/INPUT|TEXTAREA|BUTTON/.test(document.activeElement?.tagName)) {
-        e.preventDefault();
-        $('btn-play').click();
-      }
-      if (e.code === 'Escape') {
-        if (!$('intro').hidden) this.showIntro(false);
-        else this.select(null);
-      }
-    });
+    window.addEventListener('keydown', (e) => this.onKey(e));
     $('panel').addEventListener('click', (e) => this.onPanelClick(e));
     $('panel').addEventListener('input', (e) => this.onPanelInput(e));
     $('inspector').addEventListener('click', (e) => this.onPanelClick(e));
+    window.addEventListener('beforeprint', () => { $('report').innerHTML = this.reportHtml(); });
+    let narrow = window.innerWidth < 760;
+    window.addEventListener('resize', () => {
+      if ((window.innerWidth < 760) !== narrow) { narrow = !narrow; this.renderTrack(); }
+    });
 
+    // Timeline: drag to scrub, or focus it and use the arrow keys.
     const track = $('track');
     const seek = (e) => {
       const r = track.getBoundingClientRect();
       const f = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
-      this.t = Math.max(0, f * this.run.horizon);
-      this.uiTick = -1;
+      this.seekTo(f * this.run.horizon);
     };
+    const stop = () => { this.scrubbing = false; };
     track.addEventListener('pointerdown', (e) => {
       if (this.locked()) return this.toast('Pick a recovery plan first — the clock is paused while you decide', 'Info');
       track.setPointerCapture(e.pointerId);
@@ -153,16 +183,61 @@ export class App {
       seek(e);
     });
     track.addEventListener('pointermove', (e) => { if (this.scrubbing) seek(e); });
-    track.addEventListener('pointerup', () => { this.scrubbing = false; });
+    track.addEventListener('pointerup', stop);
+    track.addEventListener('pointercancel', stop);
+    track.addEventListener('lostpointercapture', stop);
+    track.addEventListener('keydown', (e) => {
+      const step = { ArrowRight: 1, ArrowLeft: -1, ArrowUp: 1, ArrowDown: -1, PageUp: 12, PageDown: -12 }[e.key];
+      let to = null;
+      if (step) to = this.t + step;
+      if (e.key === 'Home') to = 0;
+      if (e.key === 'End') to = this.run.horizon;
+      if (to === null) return;
+      e.preventDefault();
+      if (this.locked()) return this.toast('Pick a recovery plan first — the clock is paused while you decide', 'Info');
+      this.seekTo(to);
+    });
   }
 
-  /** ?shot=overview|impact|plan|recovery puts the app in a fixed state (used for README screenshots). */
+  seekTo(t) {
+    this.t = Math.min(this.run.horizon, Math.max(0, t));
+    this.uiTick = -1;
+  }
+
+  onKey(e) {
+    const introOpen = !$('intro').hidden;
+    const el = document.activeElement;
+    if (introOpen && e.key === 'Tab') {
+      // keep keyboard focus inside the intro dialog
+      const items = [...$('intro').querySelectorAll('button')];
+      const i = items.indexOf(el);
+      e.preventDefault();
+      items[(i + (e.shiftKey ? -1 : 1) + items.length) % items.length].focus();
+      return;
+    }
+    if (e.code === 'Escape') {
+      if (introOpen) this.showIntro(false);
+      else this.select(null);
+      return;
+    }
+    if (e.code !== 'Space' || introOpen) return;
+    const typing = el?.tagName === 'TEXTAREA' || (el?.tagName === 'INPUT' && el.type !== 'range');
+    // A button reached with the keyboard keeps Space; after a mouse click Space means play/pause.
+    const keyboardButton = /BUTTON|SUMMARY/.test(el?.tagName) && el.matches(':focus-visible');
+    if (typing || keyboardButton) return;
+    e.preventDefault();
+    if (/BUTTON|SUMMARY/.test(el?.tagName)) el.blur();
+    this.togglePlay();
+  }
+
+  /** ?shot=overview|impact|plan|recovery|report puts the app in a fixed state (README screenshots, sample report). */
   async runShot(kind) {
     this.noWorker = true; // headless capture clocks don't drive Web Workers
     const wait = (ms) => new Promise((r) => { setTimeout(r, ms); });
     if (kind === 'overview') {
       this.t = 8.2;
       this.setPlaying(false);
+      await wait(1600); // let the stepper animation finish under the capture clock
       return;
     }
     this.t = 6.5;
@@ -170,22 +245,30 @@ export class App {
     await wait(4200);
     if (kind === 'impact') return;
     await this.plan();
+    // Headless capture clocks run the shockwaves slowly; clear them for a clean still.
+    this.map.effects.clearRipples();
     if (kind === 'plan') return;
     this.apply();
     this.t = this.scenario.start + 27;
     await wait(1200);
+    this.map.effects.clearRipples();
     this.setPlaying(false);
+    if (kind === 'report') $('report').innerHTML = this.reportHtml();
   }
 
   showIntro(on) {
+    if (on === !$('intro').hidden) return;
     $('intro').hidden = !on;
     // Hold the clock while the intro is open so the opening scene is still ahead.
     if (on) {
       this.wasPlaying = this.playing;
       this.setPlaying(false);
+      this.introReturn = document.activeElement;
       $('intro-start').focus({ preventScroll: true });
-    } else if (this.wasPlaying !== undefined) {
-      this.setPlaying(this.wasPlaying);
+    } else {
+      if (this.wasPlaying !== undefined) this.setPlaying(this.wasPlaying);
+      if (this.introReturn && this.introReturn !== document.body) this.introReturn.focus?.({ preventScroll: true });
+      this.introReturn = null;
     }
   }
 
@@ -218,9 +301,18 @@ export class App {
     if (this.mode === 'thinking') { cls += ' status--think'; text = 'AI planner simulating futures…'; }
     if (this.mode === 'plans') { cls += ' status--bad'; text = 'Disruption · choose a recovery plan'; }
     if (this.mode === 'recovering') {
-      const over = this.t >= sc.start + sc.days * 24;
-      cls += over ? '' : ' status--ai';
-      text = over ? 'Disruption over · network recovered' : `Recovery plan active · ${SCENARIOS[sc.type].title}`;
+      // "Back to normal" only once the plan run's last late order has arrived.
+      const m = this.run.metrics;
+      const backAt = m.late ? (m.recovered ? sc.start + m.recoveryH : Infinity) : sc.end;
+      const title = SCENARIOS[sc.type].title;
+      if (this.t < sc.start) text = 'Before the disruption';
+      else if (this.t < sc.end) {
+        cls += this.applied.actions.length ? ' status--ai' : ' status--bad';
+        text = this.applied.actions.length ? `Recovery plan active · ${title}` : `No plan · ${title}`;
+      } else if (this.t < backAt) {
+        cls += ' status--warn';
+        text = 'Disruption over · clearing late orders';
+      } else text = 'Back to normal · orders on time again';
     }
     if (el.className !== cls) el.className = cls;
     if (el.textContent !== text) el.textContent = text;
@@ -229,6 +321,7 @@ export class App {
   // -------------------------------------------------------------- timeline
   renderTrack() {
     const H = this.run.horizon;
+    $('track').setAttribute('aria-valuemax', String(H));
     const pos = (t) => `${((t / H) * 100).toFixed(2)}%`;
     const daysHtml = [];
     const short = window.innerWidth < 760;
@@ -258,7 +351,11 @@ export class App {
     $('track-fill').style.width = f;
     $('track-thumb').style.left = f;
     const clock = fmtTime(this.t);
-    if ($('clock').textContent !== clock) $('clock').textContent = clock;
+    if ($('clock').textContent !== clock) {
+      $('clock').textContent = clock;
+      $('track').setAttribute('aria-valuenow', this.t.toFixed(1));
+      $('track').setAttribute('aria-valuetext', clock);
+    }
 
     const q = Math.floor(this.t * 4);
     const now = performance.now();
@@ -278,7 +375,7 @@ export class App {
     const tiles = [
       { label: 'Orders on time', value: pct(k.onTime), tone: tone(k.onTime, 0.985, 0.9) },
       { label: 'Hospital orders late', value: int(k.critLate), tone: k.critLate ? 'bad' : 'ok' },
-      { label: 'Trucks on the road', value: `${k.trucks}${k.aiTrucks ? `<small style="font-size:11px;color:#16A34A;font-weight:600"> · ${k.aiTrucks} AI</small>` : ''}`, tone: '' },
+      { label: 'Trucks on the road', value: `${k.trucks}${k.aiTrucks ? `<small class="kpi__ai"> · ${k.aiTrucks} AI</small>` : ''}`, tone: '' },
       { label: 'Stock on hand', value: `${oneDecimal(k.cover)} d`, tone: k.cover < 1 ? 'bad' : k.cover < 1.6 ? 'warn' : '' },
     ];
     $('kpis').innerHTML = tiles.map((x) => `<div class="kpi${x.tone ? ` kpi--${x.tone}` : ''}"><div class="kpi__label">${x.label}</div><div class="kpi__value">${x.value}</div></div>`).join('');
@@ -301,6 +398,17 @@ export class App {
   }
 
   renderPanel() {
+    const panel = $('panel');
+    // Re-rendering the same step (new objective, another strategy picked) keeps the
+    // scroll position, the open comparison and keyboard focus; a new step starts fresh.
+    const same = this.panelMode === this.mode;
+    const scroll = panel.scrollTop;
+    const open = same && panel.querySelector('details.more')?.open;
+    const active = document.activeElement;
+    const hadFocus = panel.contains(active);
+    const again = hadFocus && active.dataset?.act
+      ? Object.entries(active.dataset).map(([k, v]) => `[data-${k}="${v}"]`).join('')
+      : null;
     const html = {
       normal: () => this.panelNormal(),
       impact: () => this.panelImpact(),
@@ -308,9 +416,14 @@ export class App {
       plans: () => this.panelPlans(),
       recovering: () => this.panelRecovering(),
     }[this.mode]();
-    const panel = $('panel');
-    panel.innerHTML = `<div class="panel__body">${html}</div>`;
-    panel.scrollTop = 0;
+    panel.innerHTML = `<div class="panel__body${same ? ' is-static' : ''}">${html}</div>`;
+    if (open) panel.querySelector('details.more')?.setAttribute('open', '');
+    panel.scrollTop = same ? scroll : 0;
+    this.panelMode = this.mode;
+    if (hadFocus) {
+      const target = (again && panel.querySelector(again)) || panel.querySelector('.sticky-actions .btn') || panel;
+      target.focus({ preventScroll: true });
+    }
   }
 
   panelNormal() {
@@ -349,7 +462,10 @@ export class App {
     const m = expected.metrics;
     const chain = rippleChain(expected);
     const cost = extraCost(m, this.impact.horizon);
-    const recovered = m.late ? (m.recovered ? days(m.recoveryH) : 'not this week') : 'no delay';
+    const recovered = recoveryText(m);
+    // Downside risk from the Monte Carlo futures (the panel itself shows the expected week).
+    const bad = Math.round(risk.lateP90);
+    const tail = bad > m.late ? ` · in a bad week (1 in 10 futures) ${plural(bad, 'order')} ${bad === 1 ? 'goes' : 'go'} late` : '';
     const chart = lineChart({
       series: [
         { values: overdueSeries(expected), color: '#E5484D', fill: true },
@@ -372,7 +488,7 @@ export class App {
         <div class="stat ${m.critLate ? 'stat--bad' : 'stat--ok'}"><div class="stat__label">For hospitals</div><div class="stat__value">${m.critLate}</div><div class="stat__sub">patients wait</div></div>
         <div class="stat"><div class="stat__label">Back to normal</div><div class="stat__value">${recovered}</div><div class="stat__sub">after it starts</div></div>
       </div>
-      <div class="cost-line">${icon('DollarSign', 13)}<span>Costs about <b>${money(cost)}</b> · ${int(risk.lateP10)}–${int(risk.lateP90)} late orders across 40 possible futures</span></div>
+      <div class="cost-line">${icon('DollarSign', 13)}<span>Costs about <b>${money(cost)}</b>${tail}</span></div>
       <div class="section-title">How the shock spreads</div>
       <div class="timeline-list">${chain.slice(0, 5).map((c) => `<div class="tl-item"><time>${fmtTime(c.t)}</time><span><span class="chip chip--${c.tone}">${c.text}</span></span></div>`).join('')}
         ${chain.length <= 1 ? '<div class="tl-item"><time></time><span class="chip">Stock buffers absorb it this time</span></div>' : ''}
@@ -381,34 +497,45 @@ export class App {
       <div class="chart-card">${chart}<div class="chart-legend"><span><i style="background:#E5484D"></i>Do nothing</span><span><i style="background:#94A3B8"></i>Normal week</span><span><i style="background:rgba(229,72,77,.25)"></i>Disruption</span></div></div>
       <div class="sticky-actions">
         <button class="btn btn--ai btn--block" data-act="plan">${icon('Sparkles', 16)} Find recovery plans with AI</button>
-        <button class="btn btn--ghost btn--block" data-act="watch">${icon(this.playing ? 'Pause' : 'Play', 15)} ${this.playing ? 'Pause' : 'Watch it unfold with no plan'}</button>
+        <button class="btn btn--ghost btn--block" data-act="watch">${this.watchLabel()}</button>
       </div>`;
   }
 
+  /** Before → after rows; `eps` is the smallest change worth calling out. */
   resultsHtml(base, plan, H) {
+    const count = { show: int, more: (d) => `↑ ${int(d)}`, eps: 0.5 };
     const rows = [
-      { label: 'Late orders', ic: 'Package', a: base.late, b: plan.late, fmt: (v) => int(v) },
-      { label: 'Hospital orders late', ic: 'HeartPulse', a: base.critLate, b: plan.critLate, fmt: (v) => int(v) },
-      { label: 'Back to normal', ic: 'Timer', a: base.late ? base.recoveryH : 0, b: plan.late ? plan.recoveryH : 0, fmt: (v) => (v ? days(v) : '0 days') },
-      { label: 'Disruption cost', ic: 'DollarSign', a: extraCost(base, H), b: extraCost(plan, H), fmt: money, money: true },
+      { label: 'Late orders', ic: 'Package', a: base.late, b: plan.late, ...count },
+      { label: 'Hospital orders late', ic: 'HeartPulse', a: base.critLate, b: plan.critLate, ...count },
+      {
+        label: 'Back to normal', ic: 'Timer', a: base.late ? base.recoveryH : 0, b: plan.late ? plan.recoveryH : 0,
+        texts: [recoveryText(base), recoveryText(plan)], more: (d) => `+${days(d)}`, eps: 0.5,
+      },
+      {
+        label: 'Disruption cost', ic: 'DollarSign', a: extraCost(base, H), b: extraCost(plan, H), show: money, more: (d) => `+${money(d)}`, eps: 50,
+      },
     ];
     return `<div class="results">${rows.map((r) => {
+      const [ta, tb] = r.texts || [r.show(r.a), r.show(r.b)];
+      const down = Math.round(((r.a - r.b) / Math.max(r.a, 1e-9)) * 100);
       let delta = '<span class="result__delta result__delta--flat">same</span>';
-      if (r.a > 0 && r.b < r.a - 1e-6) delta = `<span class="result__delta result__delta--good">↓ ${Math.round(((r.a - r.b) / r.a) * 100)}%</span>`;
-      else if (r.b > r.a + 1e-6) delta = `<span class="result__delta result__delta--bad">${r.money ? `+${money(r.b - r.a)}` : `↑ ${int(r.b - r.a)}`}</span>`;
-      return `<div class="result"><span class="result__label">${icon(r.ic, 13)} ${r.label}</span><span class="result__vals"><s>${r.fmt(r.a)} →</s> ${r.fmt(r.b)}</span>${delta}</div>`;
+      if (r.a - r.b > r.eps && down > 0) delta = `<span class="result__delta result__delta--good">↓ ${down}%</span>`;
+      else if (r.b - r.a > r.eps) delta = `<span class="result__delta result__delta--bad">${r.more(r.b - r.a)}</span>`;
+      return `<div class="result"><span class="result__label">${icon(r.ic, 13)} ${r.label}</span><span class="result__vals"><s>${ta} →</s> ${tb}</span>${delta}</div>`;
     }).join('')}</div>`;
   }
 
   panelThinking() {
+    const strategies = 1 << APPLICABLE[this.scenario.type].length;
     return `${this.stepsHtml(2)}
       <h2>AI planner at work</h2>
-      <p class="lead">Trying every combination of recovery moves, and playing each one out across 40 possible futures where demand, travel times and the disruption’s real length all vary.</p>
+      <p class="lead">Trying every combination of recovery moves, and playing each one out across ${PLAN_RUNS} possible futures where demand, travel times and the disruption’s real length all vary.</p>
       <div class="thinking">
         <div class="thinking__text">${icon('Sparkles', 16)}<span id="think-text">Preparing…</span></div>
         <div class="thinking__bar"><i id="think-bar"></i></div>
-        <div class="thinking__grid" id="think-grid">${'<i></i>'.repeat(160)}</div>
-        <div class="footnote" id="think-foot">${icon('Info', 13)} Each square is a simulated week.</div>
+        <div class="thinking__grid" id="think-grid" style="grid-template-columns:repeat(${PLAN_RUNS},1fr)">${'<i></i>'.repeat(strategies * PLAN_RUNS)}</div>
+        <div class="thinking__legend"><span><i class="is-good"></i>Every hospital order on time</span><span><i class="is-bad"></i>A hospital order late</span></div>
+        <div class="footnote">${icon('Info', 13)} Each row is one strategy, each square one simulated week.</div>
       </div>`;
   }
 
@@ -419,18 +546,22 @@ export class App {
     const baseline = this.search.options.find((o) => o.id === 'none');
     const runnerUp = ranked.find((o) => o.id !== option.id && o.id !== 'none');
     const steps = actionDetails(option, this.scenario);
-    const cols = [baseline, option, runnerUp].filter(Boolean);
+    const cols = [...new Set([baseline, option, runnerUp].filter(Boolean))];
     const H = this.search.horizon;
     const cell = (o, v) => `<td class="${o === option ? 'col-pick' : ''}">${v}</td>`;
+    const head = (o) => {
+      if (o === option) return isPick ? 'AI pick' : 'Your pick';
+      return o === baseline ? 'Do nothing' : 'Runner-up';
+    };
     const rows = [
       ['Late orders', (o) => int(o.expected.late)],
       ['Hospital orders late', (o) => int(o.expected.critLate)],
-      ['Back to normal', (o) => (o.expected.late ? days(o.expected.recoveryH) : 'no delay')],
+      ['Back to normal', (o) => recoveryText(o.expected)],
       ['Disruption cost', (o) => money(extraCost(o.expected, H))],
       ['Extra CO₂', (o) => co2(extraCo2(o.expected, H))],
       ['Hospitals safe in', (o) => `${pct(o.stats.success)}`],
     ];
-    const table = `<table class="compare"><tr><th></th>${cols.map((o) => `<th class="${o === option ? 'col-pick' : ''}">${o === baseline ? 'Do nothing' : o === option ? (isPick ? 'AI pick' : 'Your pick') : 'Runner-up'}</th>`).join('')}</tr>
+    const table = `<table class="compare"><tr><th></th>${cols.map((o) => `<th class="${o === option ? 'col-pick' : ''}">${head(o)}</th>`).join('')}</tr>
       ${rows.map(([label, f]) => `<tr><td>${label}</td>${cols.map((o) => cell(o, f(o))).join('')}</tr>`).join('')}</table>`;
     const list = ranked.slice(0, 6).map((o, i) => `
       <button class="option${o.id === option.id ? ' is-on' : ''}" data-act="choose" data-id="${o.id}" aria-pressed="${o.id === option.id}">
@@ -439,20 +570,30 @@ export class App {
         <span class="option__score">#${i + 1}</span>
       </button>`).join('');
     const noAction = option.id === 'none';
+    // When the pick isn't the plan with the fewest late orders, say why: the
+    // tempting alternative leaves hospitals exposed in some of the futures.
+    const tempting = this.search.options
+      .filter((o) => o !== option && o.expected.late < option.expected.late && o.stats.success < option.stats.success)
+      .sort((a, b) => a.expected.late - b.expected.late)[0];
+    const exposed = tempting ? Math.round((1 - tempting.stats.success) * this.search.runs) : 0;
+    const whyNot = isPick && tempting
+      ? `<p class="why-not">${icon('Info', 13)}<span>Why not “${planTitle(tempting.actions)}”? Fewer late orders in the expected week (${int(tempting.expected.late)} vs ${int(option.expected.late)}), but a hospital order goes late in ${exposed} of ${this.search.runs} futures.</span></p>`
+      : '';
     return `${this.stepsHtml(2)}
       <h2>${noAction ? 'No action needed' : 'Your recovery plan'}</h2>
-      <p class="lead">Picked from ${this.search.strategies} strategies, each played out across ${this.search.runs} possible futures.</p>
+      <p class="lead">Picked from ${this.search.strategies} strategies, each played out across ${this.search.runs} possible futures from the moment the disruption hits.</p>
       <div class="seg" role="group" aria-label="Optimize for">${Object.entries(OBJECTIVES).map(([k, o]) => `<button data-act="objective" data-obj="${k}" class="${k === this.objective ? 'is-on' : ''}" aria-pressed="${k === this.objective}" title="${o.hint}">${o.label}</button>`).join('')}</div>
       <div class="plan" style="margin-top:12px">
         <span class="plan__badge">${icon(isPick ? 'Sparkles' : 'Check', 13)} ${isPick ? 'AI recommended' : 'Your pick'}</span>
         <div class="plan__title">${planTitle(option.actions)}</div>
-        <p class="reason">${planReason(option.actions, this.scenario)}</p>
+        <p class="reason">${planReason(option, this.scenario)}</p>
         <div class="plan__actions">${steps.map((a) => `<div class="action"><span class="action__icon">${icon(a.icon, 15)}</span><div><b>${a.title}</b>${a.text}</div></div>`).join('')}</div>
         ${this.resultsHtml(baseline.expected, option.expected, H)}
         <div class="confidence">
           <div class="confidence__row"><span>Every hospital order on time</span><b>${pct(option.stats.success)} of ${this.search.runs} futures</b></div>
           <div class="confidence__bar"><i style="width:${(option.stats.success * 100).toFixed(0)}%"></i></div>
         </div>
+        ${whyNot}
       </div>
       <details class="more">
         <summary>Compare all ${this.search.strategies} strategies ${icon('ChevronDown', 15)}</summary>
@@ -466,11 +607,15 @@ export class App {
 
   panelRecovering() {
     const opt = this.applied;
+    const greenTrucks = opt.actions.includes('backup') || opt.actions.includes('rebalance');
+    const lead = opt.actions.length
+      ? `${greenTrucks ? 'Green trucks and routes' : 'Green routes'} are the AI plan in action. Watch the hub stock piles and hospital labels hold steady.`
+      : 'No changes applied — the network plays out as forecast.';
     return `${this.stepsHtml(3)}
       <h2>${opt.actions.length ? `${planTitle(opt.actions)} is running` : 'Riding it out'}</h2>
-      <p class="lead">${opt.actions.length ? 'Green trucks and routes are the AI plan in action. Watch the hub stock piles and hospital labels hold steady.' : 'No changes applied — the network plays out as forecast.'}</p>
+      <p class="lead">${lead}</p>
       <div class="progress-note" id="live-note"></div>
-      <div class="section-title">This week: no plan → with plan</div>
+      <div class="section-title">No plan → with plan</div>
       ${this.resultsHtml(this.impact.expected.metrics, this.run.metrics, this.run.horizon)}
       <div class="section-title">Orders overdue, hour by hour</div>
       <div class="chart-card"><div id="live-chart"></div><div class="chart-legend"><span><i style="background:#E5484D"></i>Do nothing</span><span><i style="background:#16A34A"></i>With plan</span></div></div>
@@ -489,7 +634,7 @@ export class App {
     const k = kpisAt(this.run, this.t);
     const kb = kpisAt(this.impact.expected, this.t);
     const ok = k.critLate === 0;
-    note.innerHTML = `${icon(ok ? 'ShieldCheck' : 'TriangleAlert', 16)}<span>So far: <b>${k.critLate}</b> hospital orders late (${kb.critLate} without the plan) · <b>${k.late}</b> late overall (${kb.late})</span>`;
+    note.innerHTML = `${icon(ok ? 'ShieldCheck' : 'TriangleAlert', 16)}<span>So far: <b>${k.critLate}</b> hospital order${k.critLate === 1 ? '' : 's'} late (${kb.critLate} without the plan) · <b>${k.late}</b> late overall (${kb.late})</span>`;
     note.style.background = ok ? '' : 'var(--warn-soft)';
     const hour = Math.floor(this.t);
     if (hour !== this.liveHour) {
@@ -516,6 +661,9 @@ export class App {
   }
 
   onPanelClick(e) {
+    // The second click of a double-click would land on the next step's button,
+    // which sits in the same spot (e.g. Apply → New test).
+    if (e.detail > 1) return;
     const btn = e.target.closest('[data-act]');
     if (!btn) return;
     const act = btn.dataset.act;
@@ -532,9 +680,8 @@ export class App {
     } else if (act === 'trigger') {
       this.trigger();
     } else if (act === 'watch') {
-      this.setPlaying(!this.playing);
+      this.togglePlay();
       if (this.playing) this.setSpeed(3);
-      this.renderPanel();
     } else if (act === 'plan') {
       this.plan();
     } else if (act === 'objective') {
@@ -567,11 +714,12 @@ export class App {
   // ------------------------------------------------------------------ flow
   trigger() {
     if (this.mode !== 'normal') return;
+    this.cancelPending();
     const d = this.draft;
     const sc = { type: d.type, days: d.days, start: Math.ceil(this.t * 2) / 2 };
     if (d.type === 'hub') sc.target = d.target;
     this.scenario = sc;
-    this.impact = analyzeImpact(sc);
+    this.impact = analyzeImpact(sc, { runs: PLAN_RUNS });
     this.scenario = this.impact.expected.scenario;
     this.setRun(this.impact.expected);
     this.t = sc.start;
@@ -581,7 +729,7 @@ export class App {
     const hubsHit = new Set(chain0.filter((c) => SITES[c.site]?.type === 'hub').map((c) => c.site)).size;
     const custHit = new Set(chain0.filter((c) => SITES[c.site]?.demand).map((c) => c.site)).size;
     const sub = hubsHit || custHit
-      ? [hubsHit && `${hubsHit} hub${hubsHit > 1 ? 's' : ''} run dry`, custHit && `${custHit} customer${custHit > 1 ? 's' : ''} hit`].filter(Boolean).join(' · ')
+      ? [hubsHit && `${plural(hubsHit, 'hub')} run${hubsHit > 1 ? '' : 's'} dry`, custHit && `${plural(custHit, 'customer')} hit`].filter(Boolean).join(' · ')
       : 'buffers absorb it';
     this.map.setScenario(this.scenario, sub);
     this.renderPanel();
@@ -590,26 +738,39 @@ export class App {
     this.map.focusScenario(sc);
     const affected = [...new Set(rippleChain(this.impact.expected).map((c) => c.site).filter(Boolean))];
     const origin = beaconFor(sc, this.map.terrain.bridges);
-    setTimeout(() => this.map.ripple(origin, affected), 900);
-    setTimeout(() => { if (this.mode === 'impact') this.map.home(); }, 3600);
+    this.later(() => this.map.ripple(origin, affected), 900);
+    // Pull back to the whole board once the ripple has played, unless the user took the camera.
+    const t0 = performance.now();
+    this.later(() => {
+      if (this.mode === 'impact' && !this.selected && !this.map.world.userMovedSince(t0)) this.map.home();
+    }, 3600);
     this.toast('Clock paused — here’s how the shock spreads if you do nothing', 'TriangleAlert');
   }
 
   async plan() {
     if (this.mode !== 'impact') return;
     this.setPlaying(false);
-    this.planAt = Math.max(this.scenario.start, Math.ceil(this.t * 4) / 4);
+    // Plans always start when the disruption hits, even if the user watched the
+    // do-nothing playback first; apply() rewinds the clock to that moment.
+    this.planAt = this.scenario.start;
     this.mode = 'thinking';
     this.renderPanel();
     this.renderStatus();
     const cells = [...document.querySelectorAll('#think-grid i')];
+    const rows = cells.length / PLAN_RUNS;
     const started = performance.now();
-    let lit = 0;
+    const flow = this.flow;
     const search = await this.searchInWorker(this.scenario, this.planAt, {
-      runs: 40,
+      runs: PLAN_RUNS,
       onProgress: (p, opt) => {
-        const n = Math.round(p * cells.length);
-        for (; lit < n; lit++) cells[lit].className = opt.stats.success >= 0.9 ? 'is-good' : 'is-on';
+        // Fill this strategy's row: one square per simulated future, swept left to right.
+        const row = Math.round(p * rows) - 1;
+        opt.stats.safe.forEach((ok, j) => {
+          const cell = cells[row * PLAN_RUNS + j];
+          if (!cell) return;
+          cell.style.transitionDelay = `${j * 9}ms`;
+          cell.className = ok ? 'is-good' : 'is-bad';
+        });
         const bar = $('think-bar');
         if (bar) bar.style.width = `${(p * 100).toFixed(0)}%`;
         const tx = $('think-text');
@@ -619,6 +780,7 @@ export class App {
     // Let the animation breathe; the compute itself takes well under a second.
     const wait = Math.max(0, 1400 - (performance.now() - started));
     await new Promise((r) => { setTimeout(r, wait); });
+    if (flow !== this.flow || this.mode !== 'thinking') return; // reset while thinking
     this.search = search;
     this.chosen = null;
     this.mode = 'plans';
@@ -637,15 +799,20 @@ export class App {
         resolve(searchPlansAsync(scenario, at, { runs, onProgress }));
         return;
       }
+      this.worker = worker; // reset() terminates it if the user bails out mid-search
+      const done = () => {
+        worker.terminate();
+        if (this.worker === worker) this.worker = null;
+      };
       worker.onmessage = (e) => {
         if (e.data.type === 'progress') onProgress(e.data.p, e.data.opt);
         else {
-          worker.terminate();
+          done();
           resolve(e.data.result);
         }
       };
       worker.onerror = () => {
-        worker.terminate();
+        done();
         resolve(searchPlansAsync(scenario, at, { runs, onProgress }));
       };
       worker.postMessage({ scenario, at, runs });
@@ -663,7 +830,11 @@ export class App {
     this.baseOverdue = overdueSeries(this.impact.expected);
     this.planOverdue = overdueSeries(run);
     this.liveHour = -1;
+    this.map.clearEffects();
+    this.map.setScenario(this.scenario, option.actions.length ? 'AI recovery plan active' : 'No plan applied');
     this.setRun(run);
+    const rewound = this.t > this.planAt + 0.01;
+    this.t = this.planAt;
     this.mode = 'recovering';
     this.renderPanel();
     this.renderStatus();
@@ -671,7 +842,7 @@ export class App {
     this.setPlaying(true);
     // A green ripple from where the plan acts
     const sources = new Set();
-    for (const b of run.acts.batches) { sources.add('backup'); void b; }
+    if (run.acts.batches.length) sources.add('backup');
     for (const tr of run.acts.transfers) sources.add(tr.from);
     for (const r of run.acts.reassigned) sources.add(r.to);
     const first = [...sources][0];
@@ -683,10 +854,12 @@ export class App {
     } else if (option.actions.length) {
       this.map.ripple(beaconFor(this.scenario, this.map.terrain.bridges), [...targets], '#16A34A');
     }
-    this.toast(option.actions.length ? `Plan applied: ${planTitle(option.actions)}` : 'Continuing without changes', 'Check');
+    const from = rewound ? ` — replaying from ${fmtTime(this.planAt)}` : '';
+    this.toast(option.actions.length ? `Plan applied: ${planTitle(option.actions)}${from}` : `Continuing without changes${from}`, 'Check');
   }
 
   reset() {
+    this.cancelPending();
     this.mode = 'normal';
     this.scenario = null;
     this.impact = null;
@@ -717,14 +890,21 @@ export class App {
     };
   }
 
+  /** Printable report for the applied plan (also used for Ctrl+P via beforeprint). */
+  reportHtml() {
+    if (this.mode === 'recovering' && this.applied) return buildReport(this.reportState());
+    return '<h1>SupplyShock AI</h1><p>Trigger a disruption and apply a recovery plan, then print to get a disruption report.</p>';
+  }
+
   printReport() {
-    $('report').innerHTML = buildReport(this.reportState());
+    $('report').innerHTML = this.reportHtml();
     window.print();
   }
 
   // ------------------------------------------------------------- inspector
   select(id) {
     this.selected = id;
+    this.inspectorKey = null;
     this.map.setSelected(id);
     if (id) {
       this.renderInspector();
@@ -772,7 +952,18 @@ export class App {
       sub = `${s.critical ? 'Hospital · priority customer' : s.type === 'clinic' ? 'Clinic' : s.type === 'pharmacy' ? 'Pharmacy' : 'Care home'} · supplied by ${SITES[s.hub].name}`;
       body = `<dl class="kv"><dt>Status</dt><dd>${st.meta}</dd><dt>Orders delivered</dt><dd>${st.delivered}</dd><dt>Daily need</dt><dd>${SKUS.map((k) => `${s.demand[k.id]} ${k.name.toLowerCase()}`).join('<br>')}</dd></dl>`;
     }
-    el.innerHTML = `<div class="inspector__head"><span class="inspector__icon">${icon(SITE_ICON[s.type], 18)}</span><div><div class="inspector__title">${s.name}</div><div class="inspector__sub">${sub}</div></div><button class="icon-btn inspector__close" data-act="close" aria-label="Close">${icon('X', 15)}</button></div>${body}${action}`;
+    // Build the card and its buttons once per site and step; clock ticks only
+    // refresh the numbers, so a click never lands on a node that was just replaced.
+    const key = `${id}|${this.mode}`;
+    if (this.inspectorKey !== key) {
+      el.innerHTML = `<div class="inspector__head"><span class="inspector__icon">${icon(SITE_ICON[s.type], 18)}</span><div><div class="inspector__title">${s.name}</div><div class="inspector__sub">${sub}</div></div><button class="icon-btn inspector__close" data-act="close" aria-label="Close">${icon('X', 15)}</button></div><div class="inspector__body"></div>${action}`;
+      this.inspectorKey = key;
+      this.inspectorBody = null;
+    }
+    if (this.inspectorBody !== body) {
+      el.querySelector('.inspector__body').innerHTML = body;
+      this.inspectorBody = body;
+    }
     el.hidden = false;
   }
 }

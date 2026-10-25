@@ -83,11 +83,14 @@ export class Effects {
     this.pin = new CSS2DObject(pinEl);
     this.beacon.add(this.pin);
 
-    // Anchorage alarm around a ship held offshore
-    this.anchor = new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ color: '#E5484D', transparent: true, opacity: 0, depthWrite: false }));
-    this.anchor.position.y = -0.45;
+    // Anchorage alarm around a ship held offshore: the ring pulses, the tag stays
+    // put above the ship (siblings, so the ring's scale doesn't move the tag).
+    this.anchor = new THREE.Group();
     this.anchor.visible = false;
     scene.add(this.anchor);
+    this.anchorRing = new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ color: '#E5484D', transparent: true, opacity: 0, depthWrite: false }));
+    this.anchorRing.position.y = -0.45;
+    this.anchor.add(this.anchorRing);
     const anchorEl = document.createElement('div');
     anchorEl.className = 'anchor-tag';
     anchorEl.innerHTML = `${icon('Anchor', 12, 2.4)}<span>Held at anchor</span>`;
@@ -155,6 +158,14 @@ export class Effects {
     this.ripples.push({ mesh, age: -delay, duration, radius });
   }
 
+  clearRipples() {
+    for (const r of this.ripples) {
+      this.scene.remove(r.mesh);
+      r.mesh.material.dispose();
+    }
+    this.ripples = [];
+  }
+
   setBeacon(beacon) {
     if (!beacon) {
       this.beacon.visible = false;
@@ -215,8 +226,8 @@ export class Effects {
     }
     if (this.anchor.visible) {
       const f = (time * 0.7) % 1;
-      this.anchor.scale.setScalar(9 + f * 6);
-      this.anchor.material.opacity = 0.8 * (1 - f);
+      this.anchorRing.scale.setScalar(9 + f * 6);
+      this.anchorRing.material.opacity = 0.8 * (1 - f);
     }
     for (const p of this.smoke) {
       const f = (time * 0.22 + p.phase) % 1;

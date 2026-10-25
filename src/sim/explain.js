@@ -1,15 +1,32 @@
 // Turns simulation results into plain-language explanations. Every number here
 // comes from the simulator or the Monte Carlo search, never from a template guess.
-import { ACTIONS, SITES, SKUS, BACKUP, SCENARIOS } from '../data/network.js';
+import {
+  ACTIONS, SITES, SKUS, BACKUP, SCENARIOS, BRIDGES,
+} from '../data/network.js';
 import { fmtTime } from './query.js';
-import { money, int, pct, days, plural } from '../ui/format.js';
-import { extraCost } from './planner.js';
+import { isLateOrder } from './engine.js';
+import { int, days, plural } from '../ui/format.js';
 
 const skuName = (k) => SKUS.find((s) => s.id === k)?.name.toLowerCase() ?? k;
+const listText = (items) => (items.length > 1 ? `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}` : items[0] ?? '');
+const bridgeNames = (acts) => (acts?.bridges || []).map((b) => BRIDGES[b].name);
+
+/** Hubs that gave away the most stock when rebalancing, biggest donor first. */
+function donors(acts) {
+  const out = {};
+  for (const tr of acts?.transfers || []) out[tr.from] = (out[tr.from] || 0) + tr.units;
+  return Object.keys(out).sort((a, b) => out[b] - out[a]).map((h) => SITES[h].name);
+}
 
 export function planTitle(actions) {
   if (!actions.length) return 'Wait it out';
   return actions.map((a) => ACTIONS[a].short).join(' + ');
+}
+
+/** "Back to normal" for a run's metrics, worded the same on every screen. */
+export function recoveryText(m) {
+  if (!m.late) return 'no delay';
+  return m.recovered ? days(m.recoveryH) : `> ${days(m.recoveryH)}`;
 }
 
 export function scenarioSentence(sc) {
@@ -18,7 +35,7 @@ export function scenarioSentence(sc) {
     case 'port': return `Bayport Terminal can’t berth ships for about ${d} (${SCENARIOS.port.cause}).`;
     case 'hub': return `${SITES[sc.target].name} is offline for about ${d} (${SCENARIOS.hub.cause}).`;
     case 'bridge': return `Kell Bridge is closed for about ${d}, cutting the direct road from the port to Central Hub.`;
-    default: return `Kestrel Pharma ships only 25% of normal volume for about ${d}.`;
+    default: return `Kestrel Pharma ships only 25% of normal volume for about ${d}; the backlog follows on later sailings.`;
   }
 }
 
@@ -34,7 +51,7 @@ export function rippleChain(run) {
   }
   const seenCust = new Set();
   const late = run.orders
-    .filter((o) => o.dueAt >= sc.start && (o.completeAt === null || o.completeAt > o.dueAt + 1e-6))
+    .filter((o) => o.dueAt >= sc.start && isLateOrder(o, run.horizon))
     .sort((a, b) => a.dueAt - b.dueAt);
   for (const o of late) {
     if (seenCust.has(o.customer)) continue;
@@ -50,8 +67,10 @@ export function actionDetails(option, sc) {
   return option.actions.map((a) => {
     const base = { id: a, icon: ACTIONS[a].icon, title: ACTIONS[a].title };
     if (a === 'backup') {
-      const units = (acts.batches || []).reduce((s, b) => s + b.units, 0);
-      return { ...base, title: 'Rush order from Ridgeway Labs', text: `${int(units)} units in ${plural((acts.batches || []).length, 'batch', 'batches')}, first trucks out ${BACKUP.leadHours} h after ordering · +${Math.round(BACKUP.premium * 100)}% unit cost` };
+      const batches = acts.batches || [];
+      const units = batches.reduce((s, b) => s + b.units, 0);
+      const what = batches.length ? `${int(units)} units in ${plural(batches.length, 'batch', 'batches')}` : `A rush batch every ${BACKUP.batchEvery} h`;
+      return { ...base, title: 'Rush order from Ridgeway Labs', text: `${what}, first trucks out ${BACKUP.leadHours} h after ordering · +${Math.round(BACKUP.premium * 100)}% unit cost` };
     }
     if (a === 'rebalance') {
       const pairs = {};
@@ -65,55 +84,75 @@ export function actionDetails(option, sc) {
     if (a === 'reroute') {
       if (sc.type === 'hub') {
         const r = (acts.reassigned || []).map((x) => `${SITES[x.customer].short} → ${SITES[x.to].short}`);
-        return { ...base, title: 'Serve customers from other hubs', text: r.length ? `While ${SITES[sc.target].short} is offline: ${r.join(', ')}` : 'Customers move to the nearest open hub' };
+        return { ...base, title: 'Serve customers from other hubs', text: r.length ? `While ${SITES[sc.target].name} is offline: ${r.join(', ')}` : 'Customers move to the nearest open hub' };
       }
-      return { ...base, title: 'Detour trucks over North & Mill bridges', text: `${plural(acts.detours || 0, 'trip')} rerouted instead of waiting for Kell Bridge` };
+      const names = bridgeNames(acts);
+      return {
+        ...base,
+        title: names.length ? `Detour trucks over ${listText(names)}` : 'Detour trucks around Kell Bridge',
+        text: `${plural(acts.detours || 0, 'trip')} rerouted instead of waiting for Kell Bridge to reopen`,
+      };
     }
-    return { ...base, title: 'Hospitals first', text: 'When stock is short, hospital orders ship first and half a day of hospital demand is held in reserve' };
+    return { ...base, title: 'Hospitals first', text: 'Hospital orders ship first and half a day of their demand is held back, until a day after the disruption ends' };
   });
 }
 
 /** One plain sentence on why these levers fit this disruption. */
-export function planReason(actions, sc) {
-  if (!actions.length) return 'Stock buffers already cover this disruption, so the cheapest move is to keep running as normal.';
+export function planReason(option, sc) {
+  const { actions, acts } = option;
+  if (!actions.length) {
+    return option.expected.late
+      ? 'For this objective, no combination of recovery moves beats waiting it out.'
+      : 'Stock buffers already cover this disruption, so the cheapest move is to keep running as normal.';
+  }
   const parts = [];
   if (actions.includes('backup')) {
     parts.push({
-      port: 'Ridgeway Labs fills the gap while ships can\u2019t unload',
-      supplier: 'Ridgeway Labs tops up what Kestrel can\u2019t ship',
-      bridge: 'Ridgeway Labs supplies Central from the north side of the river',
+      port: 'Ridgeway Labs fills the gap while ships can’t unload',
+      supplier: 'Ridgeway Labs tops up what Kestrel can’t ship',
+      bridge: 'Ridgeway Labs rush-ships stock while the port road is cut',
       hub: 'Ridgeway Labs adds stock to the hubs carrying the extra load',
     }[sc.type]);
   }
-  if (actions.includes('rebalance')) parts.push('spare stock moves from North Hub to the hubs that run dry first');
-  if (actions.includes('reroute')) parts.push(sc.type === 'hub' ? `customers of ${SITES[sc.target].short} are served from the nearest open hub` : 'trucks take the North and Mill bridges instead of waiting at Kell Bridge');
+  if (actions.includes('rebalance')) {
+    const from = donors(acts);
+    parts.push(from.length ? `spare stock moves from ${listText(from)} to the hubs that run low first` : 'spare stock moves to any hub that runs low');
+  }
+  if (actions.includes('reroute')) {
+    const names = bridgeNames(acts);
+    parts.push(sc.type === 'hub'
+      ? `customers of ${SITES[sc.target].name} are served from the nearest open hub`
+      : `trucks take ${names.length ? listText(names) : 'another bridge'} instead of waiting at Kell Bridge`);
+  }
   if (actions.includes('prioritize')) parts.push('scarce stock goes to hospitals first');
-  const text = parts.join(', ').replace(/, ([^,]*)$/, ' and $1');
+  const text = listText(parts);
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
 }
 
-export function whyText(option, baseline, search) {
-  const H = search.horizon;
-  const b = baseline.expected;
-  const o = option.expected;
-  const lines = [
-    `If you do nothing: ${plural(b.late, 'late order')} (${b.critLate} for hospitals) and about ${money(extraCost(b, H))} in penalties and extra trucking.`,
-  ];
-  if (option.actions.length) {
-    lines.push(`With this plan: ${plural(o.late, 'late order')}${o.late < b.late ? ` (${b.late - o.late} fewer)` : ''}. In ${pct(option.stats.success)} of ${search.runs} simulated futures every hospital order still arrives on time — versus ${pct(baseline.stats.success)} if you do nothing.`);
-  }
-  return lines;
+/** The single lever that helped hospitals most on its own (Monte Carlo averages). */
+function strongestLever(search) {
+  const singles = search.options.filter((o) => o.actions.length === 1);
+  singles.sort((a, b) => a.stats.critLate - b.stats.critLate || a.stats.late - b.stats.late);
+  return singles[0] || null;
 }
 
-export function insights(sc, baselineRun, option, planRun) {
+export function insights(sc, baselineRun, option, planRun, search) {
   const out = [];
   const first = baselineRun.metrics.firstStockout;
   if (first) out.push(`Without action the first stockout hits ${SITES[first.hub].name} (${skuName(first.sku)}) at ${fmtTime(first.t)} — ${days(first.t - sc.start)} after the disruption starts.`);
-  if (option.actions.includes('backup')) out.push('Pre-negotiate a standing rush agreement with a local backup supplier — it was the strongest lever in this test.');
-  if (option.actions.includes('rebalance')) out.push('North Hub’s extra safety stock acted as the network’s shock absorber; keep a regional reserve like it.');
-  if (option.actions.includes('reroute') && sc.type === 'bridge') out.push('Add the North Bridge detour to dispatch playbooks so trucks don’t wait on a closed bridge.');
-  if (option.actions.includes('reroute') && sc.type === 'hub') out.push('Document which hub backs up each customer so reassignments happen within hours, not days.');
-  if (option.actions.includes('prioritize')) out.push('Agree a hospital-first rationing rule in advance so scarce stock goes to patients automatically.');
-  if (planRun && planRun.metrics.late === 0) out.push('With the plan, every order in the simulated week was delivered on time.');
+  const none = search.options.find((o) => o.id === 'none');
+  const best = strongestLever(search);
+  if (best && none && best.stats.late < none.stats.late) {
+    out.push(`On its own, “${ACTIONS[best.actions[0]].short}” was the strongest single move: ${plural(Math.round(best.expected.late), 'late order')} instead of ${int(none.expected.late)}.`);
+  }
+  const has = (a) => option.actions.includes(a);
+  if (has('backup')) out.push('Pre-negotiate a standing rush agreement with a local backup supplier so it can start within hours.');
+  const from = donors(option.acts);
+  if (has('rebalance') && from.length) out.push(`${from[0]}’s extra safety stock acted as the network’s shock absorber; keep a regional reserve like it.`);
+  const names = bridgeNames(option.acts);
+  if (has('reroute') && sc.type === 'bridge' && names.length) out.push(`Add the ${listText(names)} detour to dispatch playbooks so trucks don’t wait at a closed bridge.`);
+  if (has('reroute') && sc.type === 'hub') out.push('Document which hub backs up each customer so reassignments happen within hours, not days.');
+  if (has('prioritize')) out.push('Agree a hospital-first rationing rule in advance so scarce stock goes to patients automatically.');
+  if (planRun && planRun.metrics.late === 0) out.push('With the plan, every order in the simulated period was delivered on time.');
   return out;
 }

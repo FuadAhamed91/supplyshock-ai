@@ -115,12 +115,13 @@ export const VESSEL = {
   every: 48,
   unloadHours: 3,
   cargo: { INS: 960, IVF: 1100, MSK: 1080 },
+  catchUp: 1, // after a supplier outage, each sailing can carry up to one extra load of backlog
 };
 
 export const BACKUP = {
   leadHours: 8, // first batch ready this long after the order
   batchEvery: 12,
-  batch: { INS: 130, IVF: 150, MSK: 130 },
+  batch: { INS: 135, IVF: 180, MSK: 130 },
   premium: 0.4, // +40% on unit cost for rush local production
 };
 

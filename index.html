@@ -3,8 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SupplyShock AI</title>
-    <meta name="description" content="Rehearse supply-chain disruptions on a live 3D model of your network and let an AI planner find the fastest way to recover." />
+    <title>SupplyShock AI — disruption simulator for distributors</title>
+    <meta name="description" content="Break one link of a supply chain on a live 3D map, watch the shock ripple out to hospitals, and let an AI planner rehearse every recovery option." />
+    <meta name="theme-color" content="#EEF2F7" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="SupplyShock AI — when one link breaks, who runs out first?" />
+    <meta property="og:description" content="Break one link of a supply chain on a live 3D map, watch the shock ripple out to hospitals, and let an AI planner rehearse every recovery option." />
+    <meta property="og:url" content="https://supplyshock-ai.vercel.app/" />
+    <meta property="og:image" content="https://supplyshock-ai.vercel.app/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -21,16 +30,16 @@
           <div class="brand__tag">Disruption simulator for distributors</div>
         </div>
       </div>
-      <div id="status" class="status"></div>
+      <div id="status" class="status" role="status"></div>
       <div id="kpis" class="kpis" aria-label="Network right now"></div>
       <div class="topbar__right">
         <button id="btn-help" class="icon-btn" title="How it works" aria-label="How it works"></button>
         <button id="btn-home" class="icon-btn" title="Reset camera" aria-label="Reset camera"></button>
-        <button id="btn-reset" class="btn btn--ghost btn--sm" title="Start over" aria-label="Reset"></button>
+        <button id="btn-reset" class="btn btn--ghost btn--sm" title="Start over" aria-label="Reset the simulation"></button>
       </div>
     </header>
 
-    <aside id="panel" class="panel card" aria-live="polite"></aside>
+    <aside id="panel" class="panel card" aria-label="Stress test" tabindex="-1"></aside>
 
     <aside id="side" class="side card">
       <h3 class="eyebrow">Live events</h3>
@@ -51,7 +60,7 @@
         <button data-speed="1">1×</button><button data-speed="3">3×</button><button data-speed="8">8×</button>
       </div>
       <div id="clock" class="clock"></div>
-      <div id="track" class="track" aria-label="Timeline">
+      <div id="track" class="track" role="slider" tabindex="0" aria-label="Timeline" aria-valuemin="0" aria-valuemax="168">
         <div id="track-days" class="track__days"></div>
         <div id="track-marks" class="track__marks"></div>
         <div id="track-fill" class="track__fill"></div>
@@ -59,7 +68,7 @@
       </div>
     </footer>
 
-    <div id="toast" class="toast" hidden></div>
+    <div id="toast" class="toast" role="status" hidden></div>
 
     <div id="loader" class="loader">
       <div class="loader__inner">
@@ -71,7 +80,7 @@
     </div>
 
     <div id="intro" class="intro" hidden>
-      <div class="intro__card card" role="dialog" aria-labelledby="intro-title">
+      <div class="intro__card card" role="dialog" aria-modal="true" aria-labelledby="intro-title">
         <div class="intro__eyebrow"><span class="brand__mark" aria-hidden="true"></span>SupplyShock AI</div>
         <h1 id="intro-title">When one link breaks, who runs out first?</h1>
         <p class="intro__lead">A ship stuck outside the port on Monday can leave a hospital without insulin by Wednesday. Small distributors usually find out when the phone rings — the planning suites that model this are built for giant companies.</p>

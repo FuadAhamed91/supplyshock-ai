@@ -7,7 +7,7 @@
 // Monte Carlo search (noise on, many seeds).
 
 import {
-  SITES, HUB_IDS, CUSTOMER_IDS, SKU_IDS, SKUS, VESSEL, BACKUP, OPS, BASE_HORIZON,
+  SITES, HUB_IDS, CUSTOMER_IDS, SKU_IDS, SKUS, VESSEL, BACKUP, OPS, BASE_HORIZON, BRIDGES,
 } from '../data/network.js';
 import { route, usesRoad } from './graph.js';
 import { mulberry32, clamp } from './rng.js';
@@ -15,12 +15,16 @@ import { mulberry32, clamp } from './rng.js';
 const BRIDGE_ROAD = 'harborRd';
 const UNIT_COST = Object.fromEntries(SKUS.map((s) => [s.id, s.unitCost]));
 const PRIO = {
-  ARRIVE: 0, UNLOAD: 1, BERTH: 1, HELD: 2, DSTART: 2, DEND: 2, PLAN: 3, DUE: 4,
+  ARRIVE: 0, UNLOAD: 1, BERTH: 1, HELD: 2, DSTART: 2, DEND: 2, PLAN: 3, RATION_END: 3, DUE: 4,
   REBALANCE: 5, BACKUP: 6, DISPATCH: 7, PORT: 8, SAMPLE: 9,
 };
 
 export const zero = () => Object.fromEntries(SKU_IDS.map((k) => [k, 0]));
 export const total = (c) => SKU_IDS.reduce((a, k) => a + c[k], 0);
+
+/** An order counts as late if it was due within the horizon and arrived after its due time (or never). */
+export const isLateOrder = (o, horizon) => o.dueAt <= horizon
+  && (o.completeAt === null ? o.dueAt < horizon : o.completeAt > o.dueAt + 1e-6);
 
 class EventQueue {
   constructor() { this.a = []; this.seq = 0; }
@@ -117,7 +121,9 @@ export function simulate({
   const stockouts = [];
   const outNow = Object.fromEntries(HUB_IDS.map((h) => [h, zero()]));
   const log = light ? () => {} : (t, tone, text, site = null) => events.push({ t, tone, text, site });
-  const acts = { transfers: [], batches: [], reassigned, detours: 0, firstAt: null };
+  const acts = {
+    transfers: [], batches: [], reassigned, detours: 0, bridges: [], firstAt: null,
+  };
   let movingHours = 0;
   let waitingHours = 0;
   let premiumCost = 0;
@@ -137,6 +143,9 @@ export function simulate({
         r = alt;
         detour = true;
         acts.detours++;
+        for (const [id, b] of Object.entries(BRIDGES)) {
+          if (r.roads.includes(b.road) && !acts.bridges.includes(id)) acts.bridges.push(id);
+        }
       } else {
         depart = sc.end; // hold the truck until the bridge reopens
       }
@@ -322,7 +331,16 @@ export function simulate({
     }
     backupUnits += units;
     acts.batches.push({ t, units });
-    for (const h of open) if (total(alloc[h]) >= 30) sendLoads('backup', 'backup', h, alloc[h], t);
+    // Small shares ride along with the biggest load, so every unit paid for is shipped.
+    const big = open.reduce((a, b) => (total(alloc[b]) > total(alloc[a]) ? b : a));
+    for (const h of open) {
+      if (h === big || total(alloc[h]) >= 30) continue;
+      for (const k of SKU_IDS) {
+        alloc[big][k] += alloc[h][k];
+        alloc[h][k] = 0;
+      }
+    }
+    for (const h of open) if (total(alloc[h]) > 0) sendLoads('backup', 'backup', h, alloc[h], t);
     log(t, 'ai', `Ridgeway Labs shipped ${units.toLocaleString('en-US')} rush units`, 'backup');
   }
 
@@ -339,6 +357,7 @@ export function simulate({
 
   // ----------------------------------------------------------------- vessel
   let berthFree = 0;
+  const backlog = zero(); // cargo a supplier outage held back, shipped on later sailings
   for (let i = 0; ; i++) {
     const scheduled = VESSEL.firstArrival + i * VESSEL.every + (noise ? rngScen() * 3 - 1 : 0);
     if (scheduled > horizon) break;
@@ -350,8 +369,23 @@ export function simulate({
     }
     const share = sc && sc.type === 'supplier' && scheduled >= sc.start && scheduled < sc.end ? 0.25 : 1;
     const cargo = {};
-    for (const k of SKU_IDS) cargo[k] = Math.round(VESSEL.cargo[k] * share);
-    const v = { id: i + 1, scheduled, arrive, held, share, cargo, unloadEnd: arrive + VESSEL.unloadHours };
+    let extra = 0;
+    for (const k of SKU_IDS) {
+      const full = VESSEL.cargo[k];
+      if (share < 1) {
+        cargo[k] = Math.round(full * share);
+        backlog[k] += full - cargo[k];
+      } else {
+        // once the outage is over, each sailing carries part of the backlog on top
+        const add = Math.min(backlog[k], Math.round(full * VESSEL.catchUp));
+        backlog[k] -= add;
+        extra += add;
+        cargo[k] = full + add;
+      }
+    }
+    const v = {
+      id: i + 1, scheduled, arrive, held, share, extra, cargo, unloadEnd: arrive + VESSEL.unloadHours,
+    };
     berthFree = v.unloadEnd + 0.5;
     vessels.push(v);
     if (held) push(scheduled, 'HELD', { vessel: v });
@@ -412,7 +446,7 @@ export function simulate({
         break;
       case 'BERTH': {
         const v = ev.vessel;
-        const note = v.share < 1 ? ' (partial load)' : '';
+        const note = v.share < 1 ? ' (partial load)' : v.extra ? ' (incl. backlog)' : '';
         log(t, v.share < 1 ? 'warn' : 'info', `${VESSEL.name} berthed with ${total(v.cargo).toLocaleString('en-US')} units${note}`, 'port');
         break;
       }
@@ -464,9 +498,14 @@ export function simulate({
           const lead = BACKUP.leadHours + (noise ? rngScen() * 4 - 1 : 0);
           for (let tt = t + lead; tt < until + 6; tt += BACKUP.batchEvery) push(tt, 'BACKUP');
         }
+        if (prioritize) push(until + 24, 'RATION_END');
         if (reroute || prioritize) push(t + 0.5, 'DISPATCH');
         break;
       }
+      case 'RATION_END':
+        prioritize = false;
+        log(t, 'ai', 'Hospitals-first rationing lifted — normal dispatch resumes', null);
+        break;
       case 'DUE': {
         const o = ev.order;
         if (!o.done) {
@@ -499,8 +538,7 @@ export function simulate({
 
   // ----------------------------------------------------------------- metrics
   const considered = orders.filter((o) => o.dueAt <= horizon);
-  const isLate = (o) => (o.completeAt === null ? o.dueAt < horizon : o.completeAt > o.dueAt + 1e-6);
-  const late = considered.filter(isLate);
+  const late = considered.filter((o) => isLateOrder(o, horizon));
   const critLate = late.filter((o) => o.critical);
   let recoveredAt = null;
   if (late.length) recoveredAt = Math.max(...late.map((o) => o.completeAt ?? Infinity));

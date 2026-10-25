@@ -25,13 +25,13 @@ export function lineChart({ series, horizon, band, now, width = 352, height = 13
   const ticks = [0, Math.round(max / 2), max];
   for (const v of ticks) {
     parts.push(`<line x1="${pad.l}" x2="${pad.l + w}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="#E8ECF2" stroke-width="1"/>`);
-    parts.push(`<text x="${pad.l - 6}" y="${(y(v) + 3.5).toFixed(1)}" text-anchor="end" font-size="9.5" fill="#94A3B8">${v}</text>`);
+    parts.push(`<text x="${pad.l - 6}" y="${(y(v) + 3.5).toFixed(1)}" text-anchor="end" font-size="9.5" fill="#64748B">${v}</text>`);
   }
   // x axis: day labels
   for (let d = 0; d * 24 <= horizon; d++) {
     const xx = x(d * 24 + 12);
     if (d * 24 + 12 > horizon) break;
-    parts.push(`<text x="${xx.toFixed(1)}" y="${height - 5}" text-anchor="middle" font-size="9.5" fill="#94A3B8">D${d + 1}</text>`);
+    parts.push(`<text x="${xx.toFixed(1)}" y="${height - 5}" text-anchor="middle" font-size="9.5" fill="#64748B">D${d + 1}</text>`);
     if (d > 0) parts.push(`<line x1="${x(d * 24).toFixed(1)}" x2="${x(d * 24).toFixed(1)}" y1="${pad.t + h}" y2="${pad.t + h + 3}" stroke="#CBD5E1"/>`);
   }
   for (const s of series) {
