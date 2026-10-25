@@ -25,8 +25,8 @@ A ship stuck outside a port on Monday can leave a hospital without insulin by We
    - reroute around the disruption;
    - serve hospitals first.
 
-   Each combination is simulated in an expected week plus 40 randomized futures. The planner recommends a plan with concrete steps, before → after results and a confidence figure ("every hospital order on time in 95% of futures"). You can switch the objective (Balanced, Cheapest, Fastest, Greenest) and compare all strategies.
-4. **Watch it recover and share it.** Apply the plan: green trucks and routes carry the AI's moves while live progress tracks against "do nothing". Download a printable report or copy a summary.
+   Each combination is simulated in an expected week plus 40 randomized futures, shown live as a grid: one row per strategy, one square per future, green when every hospital order arrived on time. The planner recommends a plan with concrete steps, before → after results and a confidence figure ("every hospital order on time in 40 of 40 futures"). It prefers robust plans and says why: *"Why not Backup supplier + Rebalance stock? Fewer late orders in the expected week (0 vs 3), but a hospital order goes late in 19 of 40 futures."* You can switch the objective (Balanced, Cheapest, Fastest, Greenest) and compare all strategies.
+4. **Watch it recover and share it.** Apply the plan: the week replays from the moment the disruption hits, with green trucks and routes carrying the AI's moves while live progress tracks against "do nothing". Download a printable report ([sample PDF](docs/sample-report.pdf)) or copy a summary.
 
 | 1 · See the ripple | 2 · AI recovery plan | 3 · Watch it recover |
 |---|---|---|
@@ -46,10 +46,10 @@ network data ──► discrete-event simulator ──► 3D map + panels (what 
   - a container ship restocks the port every two days;
   - the port restocks the hubs over a road network with a river and three bridges.
 
-  Disruptions bend that flow. Every truck trip, stock level and order is recorded, and the 3D map simply plays that record back. What you see is exactly what the AI evaluated.
+  Disruptions bend that flow: a ship held at anchor, a hub offline, a bridge closed, or a short shipment whose backlog follows on later sailings. Every truck trip, stock level and order is recorded, and the 3D map simply plays that record back. What you see is exactly what the AI evaluated.
 - **AI planner** (`src/sim/planner.js`) is a simulation-based planning agent: search over strategy combinations plus Monte Carlo risk analysis.
   - Uncertainty: order sizes ±15%, travel times ±8%, and the disruption's real length −20% to +35%.
-  - Ranking: late hospital orders carry a fixed guardrail weight under every objective, so no plan "saves money" by letting patients wait.
+  - Ranking: a late hospital order outweighs any saving in cost, speed or CO₂ under every objective, so no plan "saves money" by letting patients wait. Near-ties (within Monte Carlo noise) go to the simpler plan, so it never recommends a lever that changes nothing.
   - Explanations are generated from the simulated numbers (`src/sim/explain.js`).
   - About 330–650 simulations run in under a second, right in the browser. No server and no API keys.
 - **3D map** (`src/scene/`) uses Three.js:
@@ -73,12 +73,14 @@ Requires Node 20.19+ (or 22.12+) and a browser with WebGL.
 ```bash
 npm install
 npm run dev        # open http://localhost:5173
-npm test           # engine + planner tests
+npm test           # 13 simulator + planner tests
 npm run build      # static site in dist/
 npm run assets     # rebuild the 3D models (needs Blender on your PATH)
 ```
 
-Deployed on Vercel as a static Vite site (`vercel.json`); `vercel --prod` redeploys.
+Deployed on Vercel as a static Vite site (`vercel.json`). The Vercel project is linked to this repository, so every push to `main` redeploys the live demo.
+
+Controls: drag to orbit, scroll to zoom, click a building for details. <kbd>Space</kbd> plays or pauses, the arrow keys move along the focused timeline, <kbd>Esc</kbd> closes a card.
 
 ## Project structure
 
@@ -89,6 +91,7 @@ src/scene/             Three.js map: terrain, sites, vehicles, effects
 src/ui/                app flow, charts, report, icons
 blender/               procedural 3D asset pack
 tests/                 node:test suite for the simulator and planner
+docs/                  README screenshots and a sample disruption report (PDF)
 devpost/               planning docs from the Devpost Learn skill pack (scope, PRD, spec, checklist, app map)
 ```
 

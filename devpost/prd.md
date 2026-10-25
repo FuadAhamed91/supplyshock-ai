@@ -13,7 +13,7 @@ A browser app for planners at small distributors to rehearse supply-chain disrup
 3. **Break it.** Choose a disruption card (port congestion, hub shutdown, bridge closure, supplier outage), set how long it lasts, and trigger it — or click a building and use "Simulate a shutdown here".
 4. **See the ripple.** The clock pauses. The camera flies to the disruption, a shockwave spreads, affected routes turn red and affected sites flash. The panel shows the do-nothing outcome: late orders, hospital orders late, time to recover, cost, the chain of consequences with times, and an "orders overdue" chart.
 5. **Recover with AI.** The planner animates while it simulates every combination of recovery levers across 40 possible futures. It recommends a plan with concrete steps, a one-line reason, before → after results with % change, and how often every hospital order stays on time. The user can switch the objective (Balanced, Cheapest, Fastest, Greenest), compare all strategies, or pick another plan.
-6. **Watch the recovery.** Applying the plan resumes the clock at 3×: green trucks and green routes show the plan's moves; the panel tracks live progress against the do-nothing case.
+6. **Watch the recovery.** Applying the plan replays the week at 3× from the moment the disruption hits: green trucks and green routes show the plan's moves; the panel tracks live progress against the do-nothing case.
 7. **Report.** Download a printable report (PDF via the browser) or copy a plain-text summary; start a new test.
 
 Success: a first-time viewer understands what went wrong, who it hurt and why the recommended plan is better — within a minute.
@@ -47,13 +47,14 @@ White, light "architectural model" diorama; Inter typography; indigo as the bran
 - Levers: rush order from the backup supplier, rebalance stock between hubs, reroute around the disruption, serve hospitals first (only levers that make sense for the disruption are tried).
 - Every combination is simulated in an expected case plus 40 randomized futures; plans are ranked with late hospital orders always weighted highest, then by the chosen objective.
 - Output: recommended plan, concrete steps (units, batches, transfers, reassignments), reason, before → after results, confidence, full comparison.
+- Robustness first: when a plan with fewer expected late orders is passed over because it leaves hospitals exposed in some futures, the panel says so ("Why not …?"). Near-ties go to the simpler plan.
 
 ### Recovery playback and report
-- Applying a plan replays the week with the plan in effect from that moment.
+- Applying a plan replays the week with the plan in effect from the moment the disruption hits (if the user watched the do-nothing playback first, the clock rewinds).
 - Report: what happened, impact, plan, comparison, recommendations, method.
 
 ## States and Boundaries
-- **First use** — intro overlay; clock paused until dismissed.
+- **First use** — intro overlay; clock paused until dismissed. "Start a stress test" keeps it paused at Day 1 06:00 while the test is set up.
 - **Normal** — week loops forever.
 - **Disruption chosen** — clock paused for analysis; can "watch it unfold" with no plan.
 - **Planning** — clock locked until a plan is applied.

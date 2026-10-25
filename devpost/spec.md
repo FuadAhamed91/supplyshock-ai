@@ -18,7 +18,7 @@ Why this shape: one deterministic simulator powers both the animation and the AI
 1. Load → `MapView.init` loads `public/models/supplyshock.glb`, builds the board → `simulate()` runs a normal week → the clock plays it.
 2. Trigger → `analyzeImpact(scenario)` runs the do-nothing week + 40 futures → the map switches to that run, `ripple()` animates, the panel shows metrics and `rippleChain()`.
 3. Find plans → `searchPlansAsync()` evaluates every lever combination → `rank()` orders them for the chosen objective → panel shows `actionDetails()`, `planReason()` and before/after.
-4. Apply → `runPlan()` replays the week with the plan from "now" → green trips/routes appear → live progress compares against the do-nothing run.
+4. Apply → `runPlan()` replays the week with the plan from the disruption's start → green trips/routes appear → live progress compares against the do-nothing run.
 5. Report → `buildReport()` fills a print-only article → browser print/save as PDF.
 PRD ref: `prd.md > The Core Journey`.
 
@@ -35,7 +35,7 @@ Learner choices: Three.js + Blender, white UI. Agent choices: Vite, vanilla JS (
 - `npm install` → `npm run dev` → open http://localhost:5173
 - `npm test` runs the engine tests; `npm run build` makes a static site in `dist/` (any static host works).
 - Rebuild 3D assets: `npm run assets` (needs Blender on PATH).
-- Live deployment (optional, done): https://supplyshock-ai.vercel.app (Vercel, static build from `dist/`; redeploy with `vercel --prod`).
+- Live deployment (optional, done): https://supplyshock-ai.vercel.app (Vercel, static build from `dist/`; the project is linked to the GitHub repo, so every push to `main` redeploys).
 - Public repository: https://github.com/FuadAhamed91/supplyshock-ai
 - Demo recording: start the dev server, choose "Start a stress test", trigger Port congestion early on Day 1, find plans, apply, download the report.
 
@@ -87,7 +87,7 @@ None at runtime besides Google Fonts (Inter; falls back to system fonts). No API
 
 ## Important Failure Modes
 - **No WebGL** → loader shows "Could not start the 3D view — try a browser with WebGL enabled."
-- **Slow device** → pixel ratio capped at 2; scenery is instanced; simulations take well under a second.
+- **Slow device** → pixel ratio capped at 1.5 and lowered towards 1 if frames stay slow; scenery is instanced; each model is baked into one mesh; the planner runs in a Web Worker.
 - **Clipboard blocked** → toast explains the copy failed.
 
 ## What Was Simplified and Why
@@ -99,6 +99,8 @@ None at runtime besides Google Fonts (Inter; falls back to system fonts). No API
 ## Decisions and Open Issues
 - Same simulator for animation and AI (agent) — what's on screen matches what was evaluated.
 - Ranking uses Monte Carlo averages; the panels show the expected week plus "hospitals safe in X% of futures" so numbers stay consistent across screens (agent).
-- Late hospital orders carry a fixed guardrail weight in every objective (agent) — no objective may "optimise" by letting patients wait.
+- Late hospital orders carry a guardrail weight (1,000,000 per expected late hospital order) in every objective (agent) — no objective may "optimise" by letting patients wait; a test checks that no objective's pick is less safe than the safest plan.
+- Near-ties within 1.5% go to the plan with fewer levers when it protects hospitals equally (agent), so no lever is recommended that changes nothing.
+- A supplier outage's missing cargo follows on later sailings (up to one extra load each), so the network recovers inside the simulated period (agent).
 - Learner uncertainty: not established in this session.
 - Open: learner review and approval of these planning docs.
