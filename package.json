@@ -1,0 +1,22 @@
+{
+  "name": "supplyshock-ai",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Rehearse supply-chain disruptions on a live 3D model of your network and let an AI planner find the fastest way to recover.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "assets": "blender --background --factory-startup --python blender/build_assets.py -- --out public/models/supplyshock.glb",
+    "test": "node --test \"tests/**/*.test.mjs\""
+  },
+  "license": "MIT",
+  "dependencies": {
+    "lucide": "^1.61.0",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "vite": "^8.3.5"
+  }
+}

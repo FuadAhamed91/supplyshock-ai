@@ -1,0 +1,13 @@
+node_modules
+dist
+.cache
+*.blend1
+.DS_Store
+.env
+.env.*
+!.env.example
+# personal learning context stays out of the public repo
+/devpost/learner-profile.md
+# agent-specific copies/symlinks of the skill pack (the canonical copy is .agents/skills)
+/.claude/
+/agent/
