@@ -129,7 +129,8 @@ export class TruckLayer {
 
 const SHIP_IN = catmull([[-106, 36], [-86, 35], [-70, 31], [-64, 22], [-60.6, 12], [-60, 4]], 10);
 const SHIP_OUT = catmull([[-60, 4], [-60.4, -6], [-64, -16], [-74, -23], [-106, -27]], 10);
-const ANCHOR = [-70, 31];
+// Held ships wait here: on the inbound route but east of the coastal lane.
+const ANCHOR = [-66.5, 27];
 
 const CLIP = [
   new THREE.Plane(new THREE.Vector3(1, 0, 0), 79.6),
@@ -229,32 +230,151 @@ function makeShip(scene, { hull = null, scale = 1 } = {}) {
   return ship;
 }
 
-/** Background shipping: a ship passing in the lane, one at anchor, and a queue when the port is congested. */
+// ------------------------------------------------------------- ship traffic
+// Ships follow simple harbour rules so no two hulls ever share water:
+//  * the cargo lane is a queue: a ship never closes within BERTH_SEP of the one
+//    ahead of it, so a ship waits for the berth instead of docking on top of the
+//    one still unloading;
+//  * the coastal ship sails its own lane and yields to cargo crossing it;
+//  * everything that waits (the anchorage, the anchored freighter, the queue
+//    that forms when the port is closed) sits clear of both lanes.
+// Positions are pure functions of the clock, so the timeline can be scrubbed.
+const APPROACH = 6;       // hours to sail in from the board edge
+const LEG = 2;            // hours from the anchorage to the berth
+const DEPART = 5;         // hours to sail out and clear the board
+const BERTH_SEP = 26;     // centre-to-centre gap kept between cargo ships in the lane
+const LANE_X = -77.4;     // the coastal ship's lane, close to the board's sea edge
+const LANE_SPEED = 160 / 30;
+const LANE_STEP = 0.05;   // hours per entry in the coastal ship's precomputed track
+const easeOut = (f) => 1 - (1 - f) ** 2;
+
+/** Hull footprint (length and beam, in world units) of a ship at its current scale. */
+function hullSize(ship) {
+  const o = ship.obj;
+  const keep = [o.position.clone(), o.rotation.y, o.visible];
+  o.position.set(0, 0, 0);
+  o.rotation.set(0, 0, 0);
+  o.visible = true;
+  o.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(o);
+  o.position.copy(keep[0]);
+  o.rotation.y = keep[1];
+  o.visible = keep[2];
+  const size = box.getSize(new THREE.Vector3());
+  const c = box.getCenter(new THREE.Vector3());
+  return { hl: size.x / 2, hb: size.z / 2, cx: c.x, cz: c.z };
+}
+
+/** Oriented rectangle of a hull in the sea plane. Vehicles face +X locally. */
+function hullRect(x, z, angle, size, grow = 0) {
+  const ax = [Math.cos(angle), -Math.sin(angle)];
+  const az = [Math.sin(angle), Math.cos(angle)];
+  return {
+    c: [x + ax[0] * size.cx + az[0] * size.cz, z + ax[1] * size.cx + az[1] * size.cz],
+    ax, az, hl: size.hl + grow, hb: size.hb,
+  };
+}
+
+/** Separating-axis test for two oriented rectangles. */
+function hullsTouch(a, b) {
+  for (const axis of [a.ax, a.az, b.ax, b.az]) {
+    const reach = (r) => Math.abs(r.hl * (r.ax[0] * axis[0] + r.ax[1] * axis[1])) + Math.abs(r.hb * (r.az[0] * axis[0] + r.az[1] * axis[1]));
+    const gap = Math.abs((b.c[0] - a.c[0]) * axis[0] + (b.c[1] - a.c[1]) * axis[1]);
+    if (gap >= reach(a) + reach(b)) return false;
+  }
+  return true;
+}
+
+/** Background shipping: a coastal ship in its lane, one at anchor, and a queue when the port is congested. */
 export class AmbientShips {
-  constructor(scene) {
+  constructor(scene, cargo) {
+    this.cargo = cargo;
     this.passer = makeShip(scene, { hull: '#1F4E5A', scale: 0.78 });
     this.anchored = makeShip(scene, { hull: '#3A3F6E', scale: 0.72 });
+    // `from` is how far each queued ship steams in along its own heading, from behind.
     this.queue = [
-      { ship: makeShip(scene, { hull: '#4A3B5C', scale: 0.7 }), x: -66, z: 46, ry: 1.9 },
-      { ship: makeShip(scene, { hull: '#2E4A3A', scale: 0.7 }), x: -71, z: 13, ry: 1.35 },
+      { ship: makeShip(scene, { hull: '#4A3B5C', scale: 0.7 }), x: -64, z: 48, ry: 1.9, from: 10 },
+      { ship: makeShip(scene, { hull: '#2E4A3A', scale: 0.7 }), x: -69, z: 13, ry: 1.35, from: 5 },
     ];
+    this.passerSize = hullSize(this.passer);
+    this.lane = null;
+    this.laneRun = undefined;
+  }
+
+  /**
+   * The coastal ship's position along its lane for the whole run, sampled every
+   * LANE_STEP hours. Cargo crosses its lane from the side, so looking ahead along
+   * the lane is not enough: at every step it projects its own course against
+   * where the cargo ships will be over the next few hours, and picks the first
+   * speed that keeps clear — cruise, ease off, stop, or hurry through.
+   */
+  buildLane(run) {
+    this.laneRun = run;
+    if (!run) { this.lane = null; return; }
+    const steps = Math.ceil(run.horizon / LANE_STEP) + 2;
+    const look = Math.ceil(6 / LANE_STEP); // hours of foresight, in steps
+    const every = 5;                       // check the forecast every 0.25 h
+    const hulls = [];
+    for (let i = 0; i <= steps + look; i++) {
+      hulls.push(this.cargo.poses(i * LANE_STEP).map((p) => hullRect(p.x, p.z, p.angle, this.cargo.size)));
+    }
+    const meets = (z, i) => {
+      const me = hullRect(LANE_X, z, -Math.PI / 2, this.passerSize, 1.5);
+      return hulls[i].some((h) => hullsTouch(me, h));
+    };
+    /** Steps until holding speed v runs into cargo (Infinity if it never does within the forecast). */
+    const firstHit = (z, i, v) => {
+      for (let k = 0; k <= look; k += every) if (meets(z + v * k * LANE_STEP, i + k)) return k;
+      return Infinity;
+    };
+    const lane = new Float32Array(steps);
+    let z = -80 + 160 * 0.15;
+    let v = LANE_SPEED;
+    for (let i = 0; i < steps; i++) {
+      lane[i] = z;
+      let target = null;
+      let latest = -1;
+      for (const k of [1, 0.5, 0.2, 0, 1.6]) {
+        const hit = firstHit(z, i, LANE_SPEED * k);
+        if (hit === Infinity) { target = k; break; }
+        if (hit > latest) { latest = hit; target = k; } // no clean option: put the meeting off longest
+      }
+      // ships don't stop dead: change speed over a few steps
+      const dv = LANE_SPEED * target - v;
+      v += Math.max(-0.3 * LANE_SPEED, Math.min(0.3 * LANE_SPEED, dv));
+      z += v * LANE_STEP;
+      if (z > 80) z -= 160; // off the north edge, back in from the south (both out of view)
+    }
+    this.lane = lane;
+  }
+
+  /** Lane position (and speed, for the wake) at time t. */
+  laneAt(t) {
+    if (!this.lane) return { z: -80 + 160 * ((t / 30 + 0.15) % 1), speed: LANE_SPEED };
+    const f = Math.max(0, Math.min(this.lane.length - 1.001, t / LANE_STEP));
+    const i = Math.floor(f);
+    const a = this.lane[i];
+    const b = this.lane[i + 1];
+    if (b < a - 100) return { z: b, speed: LANE_SPEED }; // the wrap: no tween across the board
+    return { z: a + (b - a) * (f - i), speed: (b - a) / LANE_STEP };
   }
 
   update(t, time, congested) {
+    if (this.laneRun !== this.cargo.run) this.buildLane(this.cargo.run);
     const bob = (o, k) => {
       o.position.y = SEA_LEVEL + Math.sin(time * 0.8 + k) * 0.05;
       o.rotation.z = Math.sin(time * 1.1 + k) * 0.01;
     };
-    const f = (t / 30 + 0.15) % 1;
+    const lane = this.laneAt(t);
     const p = this.passer.obj;
     p.visible = true;
-    p.position.set(-77.4, SEA_LEVEL, -80 + 160 * f);
+    p.position.set(LANE_X, SEA_LEVEL, lane.z);
     p.rotation.y = -Math.PI / 2;
-    this.passer.speed = 160 / 30;
+    this.passer.speed = lane.speed;
     bob(p, 1);
     const a = this.anchored.obj;
     a.visible = true;
-    a.position.set(-71, SEA_LEVEL, -42);
+    a.position.set(-64, SEA_LEVEL, -45); // clear of the coastal lane and the outbound route
     a.rotation.y = 0.45;
     bob(a, 2);
     this.queue.forEach((q, i) => {
@@ -263,7 +383,8 @@ export class AmbientShips {
       const o = q.ship.obj;
       o.visible = q.ship.shown > 0.02;
       if (!o.visible) return;
-      o.position.set(q.x - (1 - q.ship.shown) * 20, SEA_LEVEL, q.z);
+      const back = (1 - q.ship.shown) * q.from;
+      o.position.set(q.x - Math.cos(q.ry) * back, SEA_LEVEL, q.z + Math.sin(q.ry) * back);
       o.rotation.y = q.ry;
       o.scale.setScalar(0.7 * Math.min(1, q.ship.shown * 1.2));
       bob(o, 3 + i);
@@ -285,57 +406,92 @@ export class ShipLayer {
       if (d < bestD) { bestD = d; best = i; }
     }
     this.anchorS = this.inPath.cum[best];
-    this.ships = [0, 1].map(() => makeShip(scene));
+    // Three hulls: after a closure the backlog arrives back to back, and the one
+    // unloading, the one waiting and the one sailing in can all be on screen.
+    this.ships = [0, 1, 2].map(() => makeShip(scene));
+    this.size = hullSize(this.ships[0]);
     this.p = { x: 0, z: 0, angle: 0 };
-    this.held = null;
+    this.plan = [];
   }
 
-  setRun(run) { this.run = run; }
+  setRun(run) {
+    this.run = run;
+    // Dock times for one berth: a ship docks at its arrival, or once the ship
+    // before it has sailed BERTH_SEP clear, whichever is later. Unloading still
+    // ends when the simulation says it does.
+    const L = this.outPath.length;
+    const clearAfter = DEPART * (1 - Math.sqrt(Math.max(0, 1 - BERTH_SEP / L)));
+    let prevClear = -Infinity;
+    this.plan = (run ? [...run.vessels] : [])
+      .sort((a, b) => a.arrive - b.arrive)
+      .map((v) => {
+        const dock = Math.max(v.arrive, prevClear);
+        const depart = Math.max(v.unloadEnd, dock);
+        prevClear = depart + clearAfter;
+        return { v, dock, depart };
+      });
+  }
 
-  place(ship, sampler, s, time, speed) {
-    sampler.at(s, this.p);
-    ship.speed = speed;
-    ship.obj.visible = true;
-    ship.obj.position.set(this.p.x, SEA_LEVEL + Math.sin(time * 0.9) * 0.05, this.p.z);
-    ship.obj.rotation.set(0, this.p.angle, Math.sin(time * 1.3) * 0.012);
+  /**
+   * Every vessel on the board at time t, in lane order, as a pure function of
+   * the clock. `lane` is the distance along the whole route (in, then out),
+   * which is what the spacing rule is measured on.
+   */
+  poses(t) {
+    const out = [];
+    const inL = this.inPath.length;
+    const outL = this.outPath.length;
+    let ahead = Infinity; // lane position of the ship in front
+    for (const p of this.plan) {
+      const { v, dock, depart } = p;
+      const startIn = (v.held ? v.scheduled : dock) - APPROACH;
+      if (t < startIn || t > depart + DEPART) continue;
+      let lane;
+      let speed;
+      let atAnchor = false;
+      if (t >= depart) {
+        const f = (t - depart) / DEPART;
+        lane = inL + outL * easeOut(f);
+        speed = (2 * outL * (1 - f)) / DEPART;
+      } else if (v.held && t < dock - LEG) {
+        const f = Math.min(1, (t - startIn) / APPROACH);
+        lane = this.anchorS * easeOut(f);
+        speed = (2 * this.anchorS * (1 - f)) / APPROACH;
+        atAnchor = f >= 1;
+      } else {
+        const from = v.held ? this.anchorS : 0;
+        const dur = v.held ? LEG : APPROACH;
+        const f = Math.min(1, Math.max(0, (t - (dock - dur)) / dur));
+        lane = from + (inL - from) * easeOut(f);
+        speed = (2 * (inL - from) * (1 - f)) / dur;
+      }
+      if (lane > ahead - BERTH_SEP) { lane = ahead - BERTH_SEP; speed = 0; } // wait your turn
+      ahead = lane;
+      const onIn = lane <= inL;
+      (onIn ? this.inPath : this.outPath).at(onIn ? Math.max(0, lane) : lane - inL, this.p);
+      const unload = t < dock ? 0 : Math.min(1, (t - dock) / Math.max(1e-3, depart - dock));
+      out.push({ v, x: this.p.x, z: this.p.z, angle: this.p.angle, speed, unload, atAnchor: atAnchor && lane >= this.anchorS - 0.01 });
+    }
+    return out;
   }
 
   update(t, time) {
-    const run = this.run;
-    if (!run) return;
-    let used = 0;
+    if (!this.run) return;
+    const poses = this.poses(t);
     let heldPos = null;
-    const L = this.inPath.length;
-    const ease = (f) => 1 - (1 - f) ** 2;
-    for (const v of run.vessels) {
-      if (used >= this.ships.length) break;
-      const approach = 6;
-      const startIn = (v.held ? v.scheduled : v.arrive) - approach;
-      if (t < startIn || t > v.unloadEnd + 6) continue;
-      const ship = this.ships[used++];
-      if (v.held && t < v.arrive - 2) {
-        // sail to the anchorage, then wait
-        const f = Math.min(1, (t - startIn) / approach);
-        this.place(ship, this.inPath, this.anchorS * ease(f), time, (this.anchorS * 2 * (1 - f)) / approach);
-        if (f >= 1) heldPos = [this.p.x, this.p.z];
-      } else if (t < v.arrive) {
-        const from = v.held ? this.anchorS : 0;
-        const dur = v.held ? 2 : approach;
-        const f = Math.min(1, Math.max(0, (t - (v.arrive - dur)) / dur));
-        this.place(ship, this.inPath, from + (L - from) * ease(f), time, ((L - from) * 2 * (1 - f)) / dur);
-      } else if (t < v.unloadEnd) {
-        this.place(ship, this.inPath, L, time, 0);
-      } else {
-        const f = Math.min(1, (t - v.unloadEnd) / 6);
-        this.place(ship, this.outPath, this.outPath.length * f * f, time, (this.outPath.length * 2 * f) / 6);
-      }
+    this.ships.forEach((ship, i) => {
+      const p = poses[i];
+      if (!p) { ship.obj.visible = false; return; }
+      ship.speed = p.speed;
+      ship.obj.visible = true;
+      ship.obj.position.set(p.x, SEA_LEVEL + Math.sin(time * 0.9 + i) * 0.05, p.z);
+      ship.obj.rotation.set(0, p.angle, Math.sin(time * 1.3 + i) * 0.012);
+      if (p.atAnchor) heldPos = [p.x, p.z];
       // cargo bays empty out while unloading
-      const loaded = Math.ceil(ship.bays.length * v.share - 1e-6);
-      const unload = t < v.arrive ? 0 : Math.min(1, (t - v.arrive) / (v.unloadEnd - v.arrive));
-      const visible = Math.round(loaded * (1 - unload));
-      ship.bays.forEach((b, i) => { b.visible = i >= ship.bays.length - visible; });
-    }
-    for (let i = used; i < this.ships.length; i++) this.ships[i].obj.visible = false;
+      const loaded = Math.ceil(ship.bays.length * p.v.share - 1e-6);
+      const visible = Math.round(loaded * (1 - p.unload));
+      ship.bays.forEach((b, k) => { b.visible = k >= ship.bays.length - visible; });
+    });
     for (const ship of this.ships) trailWake(ship);
     this.effects.setAnchorAlarm(heldPos);
   }

@@ -36,7 +36,7 @@ export class MapView {
     this.effects = new Effects(scene, this.terrain.roadPaths, this.terrain.bridges);
     this.trucks = new TruckLayer(scene);
     this.ships = new ShipLayer(scene, this.effects);
-    this.ambient = new AmbientShips(scene);
+    this.ambient = new AmbientShips(scene, this.ships); // yields to the cargo traffic
     this.setupPicking();
   }
 
