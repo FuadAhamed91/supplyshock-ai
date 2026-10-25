@@ -12,7 +12,7 @@ const url = `${import.meta.env.BASE_URL}models/supplyshock.glb`;
 const KEEP = new Set(['TintTruck', 'Brand', 'TintRoof', 'HullTop']);
 let library = null;
 const bakedCache = new Map();
-const bakedMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.72, metalness: 0.04, envMapIntensity: 0.55 });
+const bakedMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0.05, envMapIntensity: 0.6 });
 
 export async function loadAssets(onProgress) {
   const gltf = await new GLTFLoader().loadAsync(url, (e) => {
@@ -43,8 +43,17 @@ function bakeNode(root, name) {
     }
     const c = m.color;
     const n = g.attributes.position.count;
+    const pos = g.attributes.position;
     const col = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+    for (let i = 0; i < n; i++) {
+      // cheap baked occlusion: surfaces close to the ground are a little darker
+      const y = pos.getY(i);
+      const t = Math.min(1, Math.max(0, y / 1.6));
+      const ao = 0.74 + 0.26 * t * t * (3 - 2 * t);
+      col[i * 3] = c.r * ao;
+      col[i * 3 + 1] = c.g * ao;
+      col[i * 3 + 2] = c.b * ao;
+    }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     parts.push(g);
   });

@@ -9,8 +9,26 @@ import {
 } from '../sim/query.js';
 
 const MODEL = {
-  hub: 'warehouse', supplier: 'factory', hospital: 'hospital', clinic: 'clinic', pharmacy: 'pharmacy', carehome: 'carehome',
+  hub: 'hub_central', supplier: 'factory', hospital: 'hospital_tower', clinic: 'clinic', pharmacy: 'pharmacy', carehome: 'carehome',
 };
+// Soft contact shadow under each landmark (width, depth) so buildings sit on the ground.
+const FOOT = { port: [0, 0], hub: [23, 15], supplier: [19, 14], hospital: [16, 15], clinic: [11, 10], pharmacy: [10, 9], carehome: [12, 10] };
+
+let shadowTex = null;
+function contactShadowTexture() {
+  if (shadowTex) return shadowTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(64, 64, 8, 64, 64, 64);
+  g.addColorStop(0, 'rgba(30,41,59,0.30)');
+  g.addColorStop(0.55, 'rgba(30,41,59,0.16)');
+  g.addColorStop(1, 'rgba(30,41,59,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  shadowTex = new THREE.CanvasTexture(c);
+  return shadowTex;
+}
 const LABEL_Y = { port: 17, hub: 8.6, supplier: 11.5, hospital: 11.5, clinic: 8, pharmacy: 6.6, carehome: 7.2 };
 export const RING_R = { port: 14, hub: 12.5, supplier: 10.5, hospital: 9.5, clinic: 7, pharmacy: 6, carehome: 7 };
 export const TONE_COLORS = {
@@ -100,10 +118,18 @@ export function buildSites(scene) {
     if (site.type === 'port') {
       buildPort(entry, scene);
     } else {
-      const model = cloneAsset(MODEL[site.type], ['Brand']);
+      const model = cloneAsset(site.model || MODEL[site.type], ['Brand']);
       yard.add(model);
       entry.model = model;
       entry.materials.brand = findMaterial(model, 'Brand');
+      const [fw, fd] = FOOT[site.type];
+      const blob = new THREE.Mesh(
+        new THREE.PlaneGeometry(fw, fd).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ map: contactShadowTexture(), transparent: true, depthWrite: false }),
+      );
+      blob.position.y = 0.03;
+      blob.renderOrder = 1;
+      yard.add(blob);
     }
 
     // Stock yard for hubs: crates per SKU, 6 columns x 2 levels
@@ -137,14 +163,14 @@ export function buildSites(scene) {
 
     const el = makeLabel(id, site);
     const label = new CSS2DObject(el);
-    label.position.set(site.type === 'port' ? -2 : 0, LABEL_Y[site.type], 0);
+    label.position.set(site.type === 'port' ? -2 : 0, site.labelY || LABEL_Y[site.type], 0);
     group.add(label);
     entry.label = el;
     entry.meta = el.querySelector('.tag__meta');
     entry.bars = [...el.querySelectorAll('.tag__bars b')];
     entry.labelObj = label;
 
-    group.traverse((o) => { if (o.isMesh && o !== ring && o !== fill) { o.userData.site = id; hitTargets.push(o); } });
+    group.traverse((o) => { if (o.isMesh && o !== ring && o !== fill && !o.material.map) { o.userData.site = id; hitTargets.push(o); } });
     sites[id] = entry;
   }
   return { sites, hitTargets };
@@ -159,11 +185,15 @@ function buildPort(entry, scene) {
     crane.position.set(lx, 0.25, lz);
     group.add(crane);
   }
-  const office = cloneAsset('office');
-  const [ox, oz] = local(-38.5, -6);
-  office.position.set(ox, 0, oz);
-  office.rotation.y = Math.PI / 2;
-  group.add(office);
+  const tower = cloneAsset('port_tower');
+  const [ox, oz] = local(-39.5, -6);
+  tower.position.set(ox, 0, oz);
+  tower.rotation.y = Math.PI / 2;
+  group.add(tower);
+  const lighthouse = cloneAsset('lighthouse');
+  const [lx, lz] = local(-55.2, 20.2);
+  lighthouse.position.set(lx, 0.25, lz);
+  group.add(lighthouse);
   // container yard
   const slots = [];
   for (let tier = 0; tier < 3; tier++) {

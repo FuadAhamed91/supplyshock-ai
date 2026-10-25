@@ -11,3 +11,4 @@ dist
 # agent-specific copies/symlinks of the skill pack (the canonical copy is .agents/skills)
 /.claude/
 /agent/
+__pycache__/

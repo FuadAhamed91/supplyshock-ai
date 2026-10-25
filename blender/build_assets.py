@@ -17,6 +17,7 @@ Conventions (Blender space, Z up; the glTF exporter converts to Y up):
 """
 
 import math
+import os
 import sys
 
 import bmesh
@@ -43,6 +44,10 @@ _MATS = {}
 def mat(name, color, rough=0.75, metal=0.0, emit=0.0):
     if name in _MATS:
         return _MATS[name]
+    existing = bpy.data.materials.get(name)
+    if existing is not None:
+        _MATS[name] = existing
+        return existing
     m = bpy.data.materials.new(name)
     if m.node_tree is None:  # Blender 4.x; materials always have nodes in 5.x
         m.use_nodes = True
@@ -297,29 +302,6 @@ def build_ship():
 # Buildings
 # --------------------------------------------------------------------------- #
 
-def build_warehouse():
-    b = Builder("warehouse")
-    b.box(CONCRETE(), -7.4, 9.6, -5.2, 4.9, 0.0, 0.3)
-    b.box(WALL(), -7.0, 7.0, -4.5, 4.5, 0.3, 4.2)
-    b.gable(ROOF(), -7.25, 7.25, 4.85, 4.1, 1.25)
-    b.box(ROOF_LIGHT(), -7.0, 7.0, -4.52, 4.52, 3.95, 4.15)  # eave band
-    # dock doors + canopy facing -Y
-    for x in (-5.6, -2.8, 0.0, 2.8, 5.6):
-        b.box(DOOR(), x - 0.9, x + 0.9, -4.58, -4.45, 0.3, 2.65)
-        b.box(mat("Bumper", "#F3C969", 0.6), x - 0.9, x + 0.9, -4.75, -4.45, 0.3, 0.42)
-    b.box(ROOF_LIGHT(), -6.8, 6.8, -5.55, -4.5, 2.9, 3.05)
-    b.box(BRAND(), -3.0, 3.0, -4.58, -4.5, 3.25, 3.85)  # sign band (tinted when closed)
-    # office annex
-    b.box(WALL_ALT(), 7.0, 9.3, -3.6, 1.6, 0.3, 3.0)
-    b.box(ROOF(), 6.9, 9.4, -3.7, 1.7, 3.0, 3.2)
-    b.box(GLASS(), 7.3, 9.0, -3.66, -3.58, 1.3, 2.5)
-    b.box(GLASS(), 9.3, 9.36, -3.0, 1.0, 1.5, 2.4)
-    # roof vents
-    for x in (-4.0, 0.0, 4.0):
-        b.cylinder(METAL(), x, 1.6, 4.4, 5.2, 0.32, seg=10)
-    return b.finish()
-
-
 def build_crane():
     b = Builder("port_crane")
     blue = mat("CraneBlue", "#2F6FED", 0.5)
@@ -353,133 +335,6 @@ def build_crane():
     for y in (-0.5, 0.5):
         b.beam(DARK(), (-9.2, y, 9.0), (-9.2, y, 5.2), w=0.05)
     b.box(DARK(), -10.4, -8.0, -0.65, 0.65, 4.9, 5.2)
-    return b.finish()
-
-
-def build_factory():
-    b = Builder("factory")
-    accent = mat("Violet", "#7C3AED", 0.5)
-    b.box(CONCRETE(), -7.4, 8.2, -5.4, 5.0, 0.0, 0.3)
-    b.box(WALL_SAND(), -6.0, 4.0, -4.0, 4.0, 0.3, 4.0)
-    # saw-tooth roof: glazed vertical face + sloped roof, 4 teeth
-    glass = GLASS()
-    roof = ROOF_SAND()
-    for i in range(4):
-        x0 = -6.0 + 2.5 * i
-        x1 = x0 + 2.5
-        tmp_pts = [(x0, 4.0), (x1, 4.0), (x1, 5.4)]
-        bt = bmesh.new()
-        a = [bt.verts.new((x, -4.0, z)) for x, z in tmp_pts]
-        c = [bt.verts.new((x, 4.0, z)) for x, z in tmp_pts]
-        faces = [bt.faces.new((a[0], a[1], a[2])), bt.faces.new((c[2], c[1], c[0]))]
-        bottom = bt.faces.new((a[0], c[0], c[1], a[1]))
-        vertical = bt.faces.new((a[1], c[1], c[2], a[2]))
-        slope = bt.faces.new((a[2], c[2], c[0], a[0]))
-        bmesh.ops.recalc_face_normals(bt, faces=bt.faces)
-        gi, ri, wi = b._mi(glass), b._mi(roof), b._mi(WALL_SAND())
-        for f in faces:
-            f.material_index = wi
-        bottom.material_index = wi
-        vertical.material_index = gi
-        slope.material_index = ri
-        me = bpy.data.meshes.new("_tmp")
-        bt.to_mesh(me)
-        bt.free()
-        b.bm.from_mesh(me)
-        bpy.data.meshes.remove(me)
-    # office + sign
-    b.box(WALL_SAND(), -6.0, -1.0, -4.7, -4.0, 0.3, 2.8)
-    b.box(glass, -5.6, -1.4, -4.76, -4.68, 1.3, 2.3)
-    b.box(accent, -5.6, -1.4, -4.06, -4.0, 3.05, 3.65)
-    b.box(DOOR(), 0.5, 3.0, -4.08, -4.0, 0.3, 2.9)
-    # chimney with accent rings
-    b.cylinder(mat("Chimney", "#ECE7DE", 0.8), 5.6, 2.6, 0.3, 9.2, 0.55, 0.45, seg=14)
-    b.cylinder(accent, 5.6, 2.6, 7.4, 7.8, 0.53, seg=14)
-    b.cylinder(accent, 5.6, 2.6, 8.3, 8.7, 0.5, seg=14)
-    # storage tanks
-    for y in (-2.4, 0.2):
-        b.cylinder(METAL(), 5.8, y, 0.3, 3.3, 1.05, seg=18)
-        b.cylinder(METAL(), 5.8, y, 3.3, 3.8, 1.05, 0.35, seg=18)
-    return b.finish()
-
-
-def build_hospital():
-    b = Builder("hospital")
-    sign = mat("SignBlue", "#2563EB", 0.5)
-    b.box(CONCRETE(), -6.0, 6.0, -6.2, 4.6, 0.0, 0.3)
-    b.box(WALL(), -4.5, 4.5, -3.5, 3.5, 0.3, 8.3)
-    for z in (1.5, 3.7, 5.9):
-        b.box(GLASS(), -4.56, 4.56, -3.56, 3.56, z, z + 1.0)
-    b.box(ROOF_LIGHT(), -4.62, 4.62, -3.62, 3.62, 8.3, 8.6)
-    # helipad
-    b.cylinder(DARK(), 0.4, 0.3, 8.6, 8.72, 2.3, seg=24)
-    b.box(WHITE(), -0.25, 0.25, -0.5, 1.1, 8.72, 8.76)
-    b.box(WHITE(), 1.05, 1.55, -0.5, 1.1, 8.72, 8.76)
-    b.box(WHITE(), -0.25, 1.55, 0.05, 0.55, 8.72, 8.76)
-    # emergency wing + canopy
-    b.box(WALL_ALT(), -3.0, 3.0, -5.2, -3.5, 0.3, 2.4)
-    b.box(GLASS(), -2.2, 2.2, -5.26, -5.18, 0.6, 2.0)
-    b.box(sign, -3.3, 3.3, -6.0, -4.9, 2.3, 2.5)
-    # big blue "H" sign
-    b.box(sign, -1.0, 1.0, -3.62, -3.5, 7.05, 8.05)
-    b.box(WHITE(), -0.6, -0.4, -3.66, -3.6, 7.2, 7.9)
-    b.box(WHITE(), 0.4, 0.6, -3.66, -3.6, 7.2, 7.9)
-    b.box(WHITE(), -0.4, 0.4, -3.66, -3.6, 7.48, 7.62)
-    return b.finish()
-
-
-def build_clinic():
-    b = Builder("clinic")
-    teal = mat("SignTeal", "#0D9488", 0.5)
-    b.box(CONCRETE(), -4.2, 4.2, -4.2, 3.4, 0.0, 0.25)
-    b.box(WALL(), -3.0, 3.0, -2.5, 2.5, 0.25, 4.2)
-    for z in (1.15, 2.75):
-        b.box(GLASS(), -3.05, 3.05, -2.55, 2.55, z, z + 0.85)
-    b.box(ROOF_LIGHT(), -3.1, 3.1, -2.6, 2.6, 4.2, 4.45)
-    b.box(teal, -1.3, 1.3, -3.3, -2.5, 2.2, 2.38)
-    b.box(DOOR(), -0.6, 0.6, -2.58, -2.5, 0.25, 2.0)
-    # rooftop plus sign
-    b.box(teal, -0.9, 0.9, -0.12, 0.12, 4.45, 6.25)
-    b.box(WHITE(), -0.18, 0.18, -0.16, -0.12, 4.75, 5.95)
-    b.box(WHITE(), -0.6, 0.6, -0.16, -0.12, 5.17, 5.53)
-    return b.finish()
-
-
-def build_pharmacy():
-    b = Builder("pharmacy")
-    green = mat("Awning", "#16A34A", 0.55)
-    b.box(CONCRETE(), -3.6, 3.6, -3.6, 3.0, 0.0, 0.25)
-    b.box(WALL_WARM(), -2.6, 2.6, -2.2, 2.2, 0.25, 3.2)
-    b.box(GLASS(), -2.2, 2.2, -2.26, -2.18, 0.4, 2.15)
-    b.box(green, -2.55, 2.55, -3.0, -2.2, 2.3, 2.5)
-    b.box(ROOF_LIGHT(), -2.7, 2.7, -2.3, 2.3, 3.2, 3.4)
-    b.box(green, -0.16, 0.16, -0.1, 0.1, 3.4, 4.8)
-    b.box(green, -0.62, 0.62, -0.1, 0.1, 3.94, 4.26)
-    return b.finish()
-
-
-def build_carehome():
-    b = Builder("carehome")
-    b.box(CONCRETE(), -4.6, 4.6, -4.0, 3.4, 0.0, 0.25)
-    b.box(WALL_WARM(), -3.8, 3.8, -2.6, 2.6, 0.25, 3.4)
-    b.gable(ROOF_CLAY(), -4.1, 4.1, 3.0, 3.3, 1.7)
-    for x in (-2.8, -1.6, 1.6, 2.8):
-        b.box(GLASS(), x - 0.4, x + 0.4, -2.66, -2.58, 1.3, 2.4)
-    b.box(mat("Wood", "#9B7B62", 0.8), -0.5, 0.5, -2.66, -2.58, 0.25, 2.0)
-    b.box(ROOF_CLAY(), -1.3, 1.3, -3.35, -2.6, 2.15, 2.3)
-    leaf = mat("Bush", "#93C58B", 0.9)
-    b.sphere(leaf, -2.2, -3.3, 0.6, 0.6, squash=0.8)
-    b.sphere(leaf, 2.2, -3.3, 0.6, 0.6, squash=0.8)
-    return b.finish()
-
-
-def build_office():
-    b = Builder("office")
-    b.box(WALL(), -2.2, 2.2, -1.6, 1.6, 0.0, 3.4)
-    b.box(GLASS(), -2.25, 2.25, -1.65, 1.65, 1.0, 1.6)
-    b.box(GLASS(), -2.25, 2.25, -1.65, 1.65, 2.2, 2.8)
-    b.box(ROOF_LIGHT(), -2.3, 2.3, -1.7, 1.7, 3.4, 3.6)
-    b.box(BRAND(), -1.2, 1.2, -1.72, -1.66, 2.9, 3.3)
     return b.finish()
 
 
@@ -559,42 +414,40 @@ def build_barrier():
 # --------------------------------------------------------------------------- #
 
 def render_preview(path, roots):
-    x = 0.0
-    spacing = {"ship": 28, "port_crane": 24, "warehouse": 20}
-    for ob in roots:
-        w = spacing.get(ob.name, 12)
-        x += w / 2
-        ob.location = (x, 0, 0)
-        x += w / 2
+    cols = 4
+    cell = 24.0
+    for i, ob in enumerate(roots):
+        ob.location = ((i % cols) * cell, -(i // cols) * cell, 0)
+    rows = (len(roots) + cols - 1) // cols
+    cx = (cols - 1) * cell / 2
+    cy = -(rows - 1) * cell / 2
     scene = bpy.context.scene
     world = bpy.data.worlds.new("PreviewWorld")
     scene.world = world
-    world.color = (0.9, 0.92, 0.95)
     if world.node_tree is None:
         world.use_nodes = True
-    if world.node_tree:
-        bg = next((n for n in world.node_tree.nodes if n.type == "BACKGROUND"), None)
-        if bg:
-            bg.inputs[0].default_value = (0.85, 0.88, 0.92, 1)
-            bg.inputs[1].default_value = 0.9
+    bg = next((n for n in world.node_tree.nodes if n.type == "BACKGROUND"), None)
+    if bg:
+        bg.inputs[0].default_value = (0.86, 0.89, 0.93, 1)
+        bg.inputs[1].default_value = 0.8
     sun_data = bpy.data.lights.new("Sun", "SUN")
-    sun_data.energy = 3.5
+    sun_data.energy = 2.2
     sun = bpy.data.objects.new("Sun", sun_data)
-    sun.rotation_euler = (math.radians(50), math.radians(10), math.radians(-35))
+    sun.rotation_euler = (math.radians(45), math.radians(15), math.radians(-30))
     scene.collection.objects.link(sun)
-    plane = Builder("_ground")
-    plane.box(mat("_Ground", "#EEF1F5", 1.0), -20, x + 20, -30, 30, -0.1, 0.0)
-    plane.finish()
+    ground = Builder("_ground")
+    ground.box(mat("_Ground", "#EEF1F5", 1.0), -cell, cols * cell, -rows * cell, cell, -0.1, 0.0)
+    ground.finish()
     cam_data = bpy.data.cameras.new("Cam")
     cam_data.type = "ORTHO"
-    cam_data.ortho_scale = x * 0.62
+    cam_data.ortho_scale = cols * cell * 1.02
     cam = bpy.data.objects.new("Cam", cam_data)
-    cam.location = (x / 2, -60, 46)
-    cam.rotation_euler = (math.radians(55), 0, 0)
+    cam.location = (cx, cy - 78, 44)
+    cam.rotation_euler = (math.radians(62), 0, 0)
     scene.collection.objects.link(cam)
     scene.camera = cam
-    scene.render.resolution_x = 2000
-    scene.render.resolution_y = 700
+    scene.render.resolution_x = 1800
+    scene.render.resolution_y = int(1800 * rows / cols * 0.9)
     scene.render.filepath = path
     for engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT", "BLENDER_WORKBENCH"):
         try:
@@ -602,6 +455,7 @@ def render_preview(path, roots):
             break
         except TypeError:
             continue
+    scene.view_settings.view_transform = "AgX"
     bpy.ops.render.render(write_still=True)
     print("preview written:", path, "engine:", scene.render.engine)
 
@@ -615,21 +469,25 @@ def main():
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
 
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import landmarks  # noqa: E402  (detailed buildings live in landmarks.py)
+
     roots = [
-        build_truck(), build_ship(), build_warehouse(), build_crane(), build_factory(),
-        build_hospital(), build_clinic(), build_pharmacy(), build_carehome(),
-        build_office(), build_house(), build_container(), build_crate(), build_pallet(),
-        build_barrier(),
+        build_truck(), build_ship(), build_crane(), build_house(), build_container(),
+        build_crate(), build_pallet(), build_barrier(),
     ]
     build_trees()
     roots += [bpy.data.objects["tree_round"], bpy.data.objects["tree_cone"]]
+    landmark_roots = landmarks.build_all()
+    roots += landmark_roots
 
     bpy.ops.export_scene.gltf(filepath=out, export_format="GLB", export_apply=True, export_yup=True)
     tris = sum(sum(len(p.vertices) - 2 for p in o.data.polygons) for o in bpy.data.objects if o.type == "MESH")
     print(f"exported {len(roots)} assets, {tris} triangles -> {out}")
 
     if preview:
-        render_preview(preview, roots)
+        render_preview(preview, landmark_roots + [bpy.data.objects["port_crane"], bpy.data.objects["truck"]])
 
 
-main()
+if __name__ == "__main__":
+    main()

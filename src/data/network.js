@@ -16,17 +16,17 @@ export const SITES = {
     pos: [-46, 6], dock: [-40, 10], access: 'jPort',
   },
   central: {
-    type: 'hub', name: 'Central Hub', short: 'Central',
+    type: 'hub', name: 'Central Hub', short: 'Central', model: 'hub_central', labelY: 9.4,
     pos: [-8.5, -4], rot: 0, dock: [-6, 3], access: 'jCentral',
     stockDays: 1.6, targetDays: 2.6,
   },
   north: {
-    type: 'hub', name: 'North Hub', short: 'North',
+    type: 'hub', name: 'North Hub', short: 'North', model: 'hub_north', labelY: 8.2,
     pos: [18, -35], rot: 0, dock: [20.5, -28], access: 'jNorth',
     stockDays: 6, targetDays: 6,
   },
   south: {
-    type: 'hub', name: 'South Hub', short: 'South',
+    type: 'hub', name: 'South Hub', short: 'South', model: 'hub_south', labelY: 8,
     pos: [18, 47], rot: Math.PI, dock: [15.5, 40], access: 'jSouth',
     stockDays: 1.6, targetDays: 2.6,
   },
@@ -35,12 +35,12 @@ export const SITES = {
     pos: [-26, -43], rot: 0, dock: [-24.2, -36], access: 'jRidge',
   },
   stclara: {
-    type: 'hospital', name: 'St. Clara Hospital', short: 'St. Clara',
+    type: 'hospital', name: 'St. Clara Hospital', short: 'St. Clara', model: 'hospital_tower', labelY: 13.5,
     pos: [56, -4], rot: -Math.PI / 2, dock: [49, -4], access: 'jStClara',
     hub: 'central', critical: true, demand: { INS: 140, IVF: 220, MSK: 120 },
   },
   riverside: {
-    type: 'hospital', name: 'Riverside Hospital', short: 'Riverside',
+    type: 'hospital', name: 'Riverside Hospital', short: 'Riverside', model: 'hospital_campus', labelY: 8.6,
     pos: [56, 22], rot: -Math.PI / 2, dock: [49, 22], access: 'jRiverside',
     hub: 'south', critical: true, demand: { INS: 110, IVF: 180, MSK: 100 },
   },

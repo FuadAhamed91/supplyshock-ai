@@ -31,7 +31,7 @@ PRD ref: `prd.md > The Core Journey`.
 Learner choices: Three.js + Blender, white UI. Agent choices: Vite, vanilla JS (small, easy to read), no backend.
 
 ## Where It Runs and How Someone Tries It
-- Browser with WebGL. Node 18+ for development.
+- Browser with WebGL. Node 20.19+ for development.
 - `npm install` → `npm run dev` → open http://localhost:5173
 - `npm test` runs the engine tests; `npm run build` makes a static site in `dist/` (any static host works).
 - Rebuild 3D assets: `npm run assets` (needs Blender on PATH).
@@ -57,8 +57,8 @@ Lever combinations × Monte Carlo futures, objective weights with a patient-safe
 ### App shell — `src/ui/*`, `index.html`, `src/styles.css`
 Clock, guided flow, KPIs, feed, timeline, inspector, intro, charts, report. PRD ref: `prd.md > Screens and Layout`.
 
-### Asset pipeline — `blender/build_assets.py`
-Builds 17 low-poly assets (truck, container ship, warehouse, port crane, factory, hospital, clinic, pharmacy, care home, office, house, container, crate, pallet, barrier, two trees) and exports one GLB.
+### Asset pipeline — `blender/build_assets.py`, `blender/landmarks.py`
+Builds 21 low-poly assets and exports one GLB. Shared props live in `build_assets.py` (truck, container ship, port crane, house, container, crate, pallet, barrier, two trees). `landmarks.py` holds the distinct landmarks: three different hubs, two different hospitals, clinic, pharmacy, care home, factory, port control tower and lighthouse. At load the app bakes each model into one vertex-coloured mesh for speed.
 
 ## Data Model
 All in memory. A **run** = `{ scenario, plan, shipments[], orders[], vessels[], events[], stockouts[], series{site→sku→hourly stock}, acts, metrics }`. Nothing persists; reload starts fresh.
@@ -68,7 +68,7 @@ All in memory. A **run** = `{ scenario, plan, shipments[], orders[], vessels[], 
 supplyshock-ai/
 ├── index.html              # app shell
 ├── public/models/          # supplyshock.glb (built by Blender)
-├── blender/build_assets.py # procedural 3D asset pack
+├── blender/               # procedural 3D asset pack (build_assets.py, landmarks.py)
 ├── src/
 │   ├── data/network.js     # the demo business
 │   ├── sim/                # engine, routing, planner, explanations, queries

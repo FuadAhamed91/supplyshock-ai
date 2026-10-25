@@ -34,17 +34,17 @@ export function createWorld(container) {
   const camera = new THREE.PerspectiveCamera(30, 1, 1, 1200);
   camera.position.copy(HOME.pos);
 
-  const hemi = new THREE.HemisphereLight('#FFFFFF', '#D6DEE8', 1.6);
+  const hemi = new THREE.HemisphereLight('#FFFFFF', '#BFCADA', 1.0);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight('#FFF8EE', 2.4);
-  sun.position.set(-60, 110, 55);
+  const sun = new THREE.DirectionalLight('#FFF4E2', 3.4);
+  sun.position.set(-75, 105, -55); // from the north-west: shadows fall towards the viewer
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   const sc = sun.shadow.camera;
-  sc.left = -105;
-  sc.right = 105;
-  sc.top = 85;
-  sc.bottom = -85;
+  sc.left = -112;
+  sc.right = 112;
+  sc.top = 100;
+  sc.bottom = -100;
   sc.near = 20;
   sc.far = 320;
   sun.shadow.bias = -0.0004;

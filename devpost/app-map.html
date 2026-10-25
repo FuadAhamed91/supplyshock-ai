@@ -70,7 +70,7 @@
   <details><summary>Use a different business (sites, products, demand)</summary><p>Edit <code>src/data/network.js</code> — <code>SITES</code>, <code>SKUS</code>, <code>ROADS</code>. Positions are map coordinates; run <code>npm test</code> afterwards.</p></details>
   <details><summary>Add or tune a disruption</summary><p><code>SCENARIOS</code> in <code>src/data/network.js</code> for the card; its effect lives in <code>simulate()</code> (search <code>sc.type ===</code>) in <code>src/sim/engine.js</code>.</p></details>
   <details><summary>Change how the AI ranks plans</summary><p><code>OBJECTIVES</code> and <code>GUARDRAIL</code> in <code>src/sim/planner.js</code>.</p></details>
-  <details><summary>Change a 3D model</summary><p>Edit the <code>build_*</code> function in <code>blender/build_assets.py</code>, then <code>npm run assets</code> (Blender on PATH) to regenerate <code>public/models/supplyshock.glb</code>.</p></details>
+  <details><summary>Change a 3D model</summary><p>Landmarks are in <code>blender/landmarks.py</code> (e.g. <code>build_hub_north</code>), shared props in <code>blender/build_assets.py</code>. Run <code>npm run assets</code> (Blender on PATH) to regenerate <code>public/models/supplyshock.glb</code>.</p></details>
 
   <h2>A practice to reuse</h2>
   <div class="card">
