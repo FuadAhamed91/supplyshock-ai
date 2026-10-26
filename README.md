@@ -5,6 +5,8 @@ SupplyShock AI is a disruption simulator for distributors. Break one link of a s
 
 **▶ Live demo: [supplyshock-ai.vercel.app](https://supplyshock-ai.vercel.app)** — runs entirely in your browser (desktop Chrome, Edge or Firefox recommended).
 
+**▶ Demo video (2:42): [youtu.be/m43zH1yMNg8](https://youtu.be/m43zH1yMNg8)**
+
 ![SupplyShock AI — a regional medical-supply network running normally](docs/overview.png)
 
 ## The problem
